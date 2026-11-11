@@ -1,0 +1,37 @@
+{
+  "id": "template",
+  "title": "New Learning Track Template",
+  "source_document": "custom",
+  "target_months": 3,
+  "target_weeks": 12,
+  "total_days": 84,
+  "learner_profile": "General Learner",
+  "daily_time_budget_minutes": "45-60",
+  "passing_score_percent": 80,
+  "description": "Template track. Use `./grow track create <slug> \"<Title>\"` or ask your OpenCode mentor to populate modules and days from a roadmap PDF or syllabus.",
+  "modules": [
+    {
+      "id": 1,
+      "slug": "module-1",
+      "title": "Module 1: Foundations",
+      "phase": "Beginner",
+      "pdf_est_time": "2 weeks",
+      "planned_weeks": 2,
+      "start_day": 1,
+      "end_day": 14,
+      "primary_book": {
+        "title": "Primary Reference Book",
+        "author": "Author Name",
+        "note": "Read 1 realistic section (10-15 pages) per day."
+      },
+      "essential_concepts": [
+        "Core concept 1",
+        "Core concept 2"
+      ],
+      "weekly_breakdown": [
+        "Week 1 (Days 1-7): Core Foundations",
+        "Week 2 (Days 8-14): Applied Practice"
+      ]
+    }
+  ]
+}

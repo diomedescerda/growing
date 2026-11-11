@@ -1,0 +1,12 @@
+# Ignore local device configuration and all user progress files by default
+data/config.json
+data/state.json
+data/users/*
+
+# Persist ONLY diomedes's progress in Git across devices
+!data/users/diomedes.json
+
+# Ignore local hands-on lab sandboxes and Python artifacts
+workspace/
+__pycache__/
+*.pyc

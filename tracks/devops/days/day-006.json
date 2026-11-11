@@ -1,0 +1,152 @@
+{
+  "day": 6,
+  "module_id": 1,
+  "module_title": "Linux Fundamentals & Bash Scripting",
+  "title": "Searching & Bulk Operations at Scale (`find`, `xargs`, `tar`, `gzip`)",
+  "estimated_minutes": 60,
+  "why_it_matters": "Production servers accumulate tens of thousands of log files, old release artifacts, and temp files. Knowing how to locate files by age, size, permissions, or pattern using `find` and safely act on them with `-exec` or `xargs -0` (plus packaging them with `tar`) is a daily DevOps superpower.",
+  "concept_explanation": [
+    "1. `find` Evaluates Live Filesystem Metadata: Unlike `locate` (which reads a stale daily database), `find` walks the directory tree in real time and filters by predicates:\n   - Name: `-name '*.log'` or case-insensitive `-iname '*.yaml'`\n   - Type: `-type f` (regular file), `-type d` (directory), `-type l` (symlink)\n   - Size: `-size +100M` (> 100 MB), `-size -10k`, `-empty` (0 bytes)\n   - Time: `-mtime +7` (modified > 7 days ago), `-mmin -30` (modified in last 30 mins)\n   - Permissions: `-perm 0777` (exact), `-perm /4000` (SUID set)",
+    "2. Acting on Found Files (`-exec` vs `xargs`):\n   - `find /var/log -name '*.gz' -mtime +30 -delete` (built-in fast deletion)\n   - `find . -type f -name '*.sh' -exec chmod 755 {} +` (Note: ending with `+` batches filenames into a single `chmod` invocation just like `xargs`, whereas `\\;` spawns a new process per file!)\n   - Null-delimited safety for spaces in filenames: `find . -name '*.tmp' -print0 | xargs -0 rm -f`",
+    "3. Archiving & Compression (`tar`, `gzip`, `zstd`):\n   - `tar` ('Tape Archive') bundles multiple files/directories while preserving permissions, ownership, and symlinks into a `.tar` stream, then compresses it (`-z` for gzip `.tar.gz`, `-J` for xz, `--zstd` for zstd).\n   - `tar -czf backup.tar.gz -C /etc nginx` creates an archive.\n   - `tar -tzf backup.tar.gz` lists contents **without** extracting.\n   - `tar -xzf backup.tar.gz -C /restore/dir` extracts into a target directory."
+  ],
+  "cheat_sheet": [
+    "find /var/log -type f -name '*.log' -size +50M   # Find log files larger than 50 MB",
+    "find . -type f -empty -delete                    # Delete all 0-byte files recursively",
+    "find . -name '*.conf' -exec grep -H 'port' {} +  # Search inside all .conf files efficiently",
+    "tar -czf logs-archive.tar.gz logs/               # Create gzip-compressed tar archive",
+    "tar -tzf logs-archive.tar.gz                     # Inspect archive contents without extracting"
+  ],
+  "resources": {
+    "book": {
+      "title": "The Linux Command Line (5th Internet Edition) by William Shotts",
+      "url": "https://linuxcommand.org/tlcl.php",
+      "assignment": "Read Chapter 17 ('Searching for Files' — `find` predicates, operators, `-exec`, `xargs`, ~14 pages).",
+      "realistic_time": "20 mins"
+    },
+    "video": {
+      "title": "Linux Commands for Beginners 19 - The find Command",
+      "creator": "Learn Linux TV",
+      "url": "https://www.youtube.com/watch?v=zmlNuMKJSkc",
+      "assignment": "Watch the 16-minute deep dive on finding files by name, type, size, modification time, and executing bulk actions.",
+      "realistic_time": "16 mins"
+    }
+  },
+  "lab": {
+    "title": "Clean Up Corrupted 0-Byte Artifacts & Package Production Configs with tar",
+    "description": "Inside `workspace/devops/day-006`, clean up corrupted 0-byte files across nested directories and create a compressed `.tar.gz` backup of all `.conf` files:",
+    "tasks": [
+      "1. Run `./grow lab 6` to populate `workspace/devops/day-006/cluster_data`.",
+      "2. Use `find` to locate and delete ALL empty (0-byte) files inside `cluster_data/` while leaving non-empty files untouched.",
+      "3. Use `find` to locate all `.conf` files inside `cluster_data/`, sort their relative paths alphabetically, and save that list to `workspace/devops/day-006/conf_files.txt` (or copy all `.conf` files into `workspace/devops/day-006/backup_confs/`).",
+      "4. Create a gzip-compressed tar archive at `workspace/devops/day-006/cluster_backup.tar.gz` containing the cleaned `cluster_data` directory.",
+      "5. Run `./grow verify 6` or `./grow test 6`."
+    ],
+    "setup_files": [
+      {
+        "path": "cluster_data/node-01/nginx.conf",
+        "content": "worker_processes auto;\n"
+      },
+      {
+        "path": "cluster_data/node-01/corrupt.tmp",
+        "content": ""
+      },
+      {
+        "path": "cluster_data/node-02/redis.conf",
+        "content": "maxmemory 2gb\n"
+      },
+      {
+        "path": "cluster_data/node-02/empty.log",
+        "content": ""
+      },
+      {
+        "path": "cluster_data/node-03/coredns.conf",
+        "content": ".:53 {\n  forward . 8.8.8.8\n}\n"
+      },
+      {
+        "path": "cluster_data/node-03/zero.pid",
+        "content": ""
+      }
+    ],
+    "verifications": [
+      {
+        "description": "All 0-byte files inside cluster_data/ have been deleted, and all 3 non-empty .conf files remain intact",
+        "type": "no_empty_files_and_min_files",
+        "dir": "cluster_data",
+        "expected_file_count": 3
+      },
+      {
+        "description": "conf_files.txt lists all 3 .conf files (coredns.conf, nginx.conf, redis.conf)",
+        "type": "file_contains_all",
+        "path": "conf_files.txt",
+        "substrings": [
+          "coredns.conf",
+          "nginx.conf",
+          "redis.conf"
+        ]
+      },
+      {
+        "description": "cluster_backup.tar.gz is a valid gzip tar archive containing the .conf files",
+        "type": "valid_tar_gz",
+        "path": "cluster_backup.tar.gz"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "question": "What is the performance difference between `find . -name '*.log' -exec gzip {} \\;` and `find . -name '*.log' -exec gzip {} +` on 10,000 log files?",
+      "options": [
+        "A) There is no difference",
+        "B) `\\;` forks and executes a separate `gzip` process 10,000 times (once per file), whereas `+` batches as many filenames as possible into a single `gzip` invocation (like `xargs`)",
+        "C) `+` runs in background threads automatically",
+        "D) `\\;` deletes the files after compressing"
+      ],
+      "answer": "B",
+      "explanation": "Ending `-exec` with `+` appends all matching paths to a single command invocation, avoiding thousands of expensive `fork()`/`execve()` system calls."
+    },
+    {
+      "question": "Why is `find . -type f -print0 | xargs -0 rm -f` preferred in production scripts over `find . -type f | xargs rm -f`?",
+      "options": [
+        "A) `-print0` / `-0` uses null bytes (`\\0`) as delimiters instead of whitespace/newlines, preventing filenames with spaces from breaking or deleting the wrong files",
+        "B) `-0` runs as UID 0 (root)",
+        "C) `-print0` skips hidden dotfiles",
+        "D) `-0` suppresses stderr"
+      ],
+      "answer": "A",
+      "explanation": "In Linux, the ONLY bytes illegal in a filename are `/` and the null byte (`\\0`). Using `-print0` with `xargs -0` safely handles files containing spaces, quotes, or newlines."
+    },
+    {
+      "question": "Which `find` expression locates regular files modified MORE than 14 days ago and larger than 100 Megabytes?",
+      "options": [
+        "A) find /var -type f -mtime -14 -size 100M",
+        "B) find /var -type f -mtime +14 -size +100M",
+        "C) find /var -f -days 14 -mb 100",
+        "D) find /var -type d -mmin +14 -size +100M"
+      ],
+      "answer": "B",
+      "explanation": "In `find`, `+N` means strictly greater than N, and `-N` means less than N. So `-mtime +14` is > 14 days old, and `-size +100M` is > 100 MiB."
+    },
+    {
+      "question": "Which `tar` command lets you inspect the list of files inside `release-v4.tar.gz` WITHOUT extracting them to disk?",
+      "options": [
+        "A) tar -xzf release-v4.tar.gz",
+        "B) tar -czf release-v4.tar.gz",
+        "C) tar -tzf release-v4.tar.gz",
+        "D) tar -rzf release-v4.tar.gz"
+      ],
+      "answer": "C",
+      "explanation": "`-t` (`--list`) lists the contents of an archive without extracting it (`-c` creates, `-x` extracts)."
+    },
+    {
+      "question": "You want to extract `app.tar.gz` directly into `/opt/my-service` instead of the current working directory. Which flag specifies the target directory?",
+      "options": [
+        "A) -d /opt/my-service",
+        "B) -C /opt/my-service",
+        "C) -o /opt/my-service",
+        "D) --target /opt/my-service"
+      ],
+      "answer": "B",
+      "explanation": "`tar -xzf app.tar.gz -C /opt/my-service` changes to `/opt/my-service` before performing the extraction."
+    }
+  ]
+}

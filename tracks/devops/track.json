@@ -1,0 +1,351 @@
+{
+  "id": "devops",
+  "title": "The Complete DevOps Engineer Roadmap (Developer Fast-Track)",
+  "source_document": "devops-roadmap.pdf (Mosh Hamedani)",
+  "target_months": 8,
+  "target_weeks": 32,
+  "total_days": 224,
+  "learner_profile": "Developer moving to DevOps",
+  "daily_time_budget_minutes": "60-90",
+  "passing_score_percent": 80,
+  "description": "An intensive, realistic 8-month (32-week / 224-day) daily curriculum based on Mosh Hamedani's DevOps Roadmap, tailored for a software developer transitioning into DevOps.",
+  "modules": [
+    {
+      "id": 1,
+      "slug": "linux-fundamentals",
+      "title": "Linux Fundamentals & Bash Scripting",
+      "phase": "Beginner",
+      "pdf_est_time": "2-3 weeks",
+      "planned_weeks": 3,
+      "start_day": 1,
+      "end_day": 21,
+      "primary_book": {
+        "title": "The Linux Command Line (5th Internet Edition) / How Linux Works (3rd Ed.)",
+        "author": "William Shotts (Free at linuxcommand.org) & Brian Ward",
+        "note": "We read 1 short chapter (8-15 pages) per day—never overwhelming."
+      },
+      "essential_concepts": [
+        "Basic Linux commands, streams, pipes & redirection (ls, cp, mv, rm, find, xargs)",
+        "File system hierarchy (/, /home, /etc, /var, /proc, /sys, inodes, symlinks)",
+        "Permissions, ownership, SUID/SGID/Sticky bit & sudo (chmod, chown, umask)",
+        "Processes, signals, systemd services & resource inspection (ps, top, kill, lsof, journalctl)",
+        "Package management, archives & compression (apt, yum/dnf, tar, gzip)",
+        "Production Bash scripting (set -euo pipefail, variables, loops, conditionals, functions, traps, cron)"
+      ],
+      "weekly_breakdown": [
+        "Week 1 (Days 1-7): Shell internals, File System Hierarchy (FHS), Streams/Pipes, File Permissions & Ownership",
+        "Week 2 (Days 8-14): Processes, Signals, Systemd Services, Logs (journalctl), Disk/Memory & Package Management",
+        "Week 3 (Days 15-21): Text Processing (grep, sed, awk, jq) & Production-Grade Bash Automation Scripts"
+      ]
+    },
+    {
+      "id": 2,
+      "slug": "networking-concepts",
+      "title": "Networking Concepts & Troubleshooting",
+      "phase": "Beginner",
+      "pdf_est_time": "2 weeks",
+      "planned_weeks": 2,
+      "start_day": 22,
+      "end_day": 35,
+      "primary_book": {
+        "title": "Computer Networking: A Top-Down Approach / Linux Pocket Guide (Networking sections)",
+        "author": "Kurose & Ross / Daniel J. Barrett",
+        "note": "Focused 10-page practical sections paired with Wireshark/tcpdump & CLI tools."
+      },
+      "essential_concepts": [
+        "OSI and TCP/IP models (L2 frames, L3 packets, L4 segments, 3-way handshake)",
+        "IP addressing, CIDR notation, subnetting (IPv4, IPv6, private subnets, NAT)",
+        "DNS resolution lifecycle and DHCP (dig, /etc/resolv.conf, record types)",
+        "Network protocols (HTTP/1.1, HTTP/2, HTTPS/TLS handshake, SSH & port forwarding)",
+        "Firewalls and security groups (iptables, UFW, nftables)",
+        "Network troubleshooting & packet capture (ping, traceroute/mtr, ss/netstat, nc, tcpdump, Wireshark)"
+      ],
+      "weekly_breakdown": [
+        "Week 4 (Days 22-28): TCP/IP vs OSI, IPv4/CIDR Subnetting, Routing, NAT, DNS & DHCP",
+        "Week 5 (Days 29-35): HTTP/TLS, SSH Tunneling, Host Firewalls (UFW/iptables) & Packet Troubleshooting (ss, tcpdump, Wireshark)"
+      ]
+    },
+    {
+      "id": 3,
+      "slug": "version-control-git",
+      "title": "Version Control (Git for DevOps & GitOps)",
+      "phase": "Beginner",
+      "pdf_est_time": "1-2 weeks",
+      "planned_weeks": 1,
+      "start_day": 36,
+      "end_day": 42,
+      "primary_book": {
+        "title": "Pro Git (2nd Edition - Free at git-scm.com/book)",
+        "author": "Scott Chacon & Ben Straub",
+        "note": "Fast-tracked for developers: focusing on Git internals, CI/CD branching workflows, hooks & recovery."
+      },
+      "essential_concepts": [
+        "Git object model internals (blobs, trees, commits, refs, HEAD)",
+        "Advanced branching, rebasing vs merging, cherry-picking & reflog recovery",
+        "Remote repositories, SSH signing, branch protection & CODEOWNERS (GitHub, GitLab)",
+        "Git workflows for DevOps (Trunk-Based Development, GitHub Flow, Git Flow)",
+        "Git hooks (pre-commit, pre-push) & Semantic Versioning tags for release pipelines",
+        "Complex merge conflict resolution & git bisect debugging"
+      ],
+      "weekly_breakdown": [
+        "Week 6 (Days 36-42): Git Internals, Trunk-Based vs GitFlow for CI/CD, Git Hooks, Bisect/Reflog & Release Tagging"
+      ]
+    },
+    {
+      "id": 4,
+      "slug": "python-for-devops",
+      "title": "Programming Languages (Python for DevOps Automation)",
+      "phase": "Beginner",
+      "pdf_est_time": "4-6 weeks (Fast-tracked to 2 weeks for Developers)",
+      "planned_weeks": 2,
+      "start_day": 43,
+      "end_day": 56,
+      "primary_book": {
+        "title": "Python for DevOps",
+        "author": "Noah Gift, Kennedy Behrman, Alfredo Deza, Grig Gheorghiu",
+        "note": "Skipping beginner syntax; focusing 100% on OS automation, CLI building, APIs & infrastructure scripting."
+      },
+      "essential_concepts": [
+        "Pythonic data structures, comprehensions, generators & virtual environments (venv/uv)",
+        "File handling, pathlib, structured config parsing (YAML, JSON, TOML, env vars)",
+        "Robust error handling, logging module & retry patterns",
+        "System automation with subprocess, os, sys, shutil & signal handling",
+        "Building production CLI tools with argparse / click",
+        "HTTP APIs, webhooks & scraping (requests, BeautifulSoup, pagination, auth)",
+        "Cloud & infrastructure SDK basics (boto3 patterns)"
+      ],
+      "weekly_breakdown": [
+        "Week 7 (Days 43-49): File/OS Automation (pathlib, os, subprocess), Structured Configs (YAML/JSON) & Logging",
+        "Week 8 (Days 50-56): Building DevOps CLIs (argparse/click), REST API Automation (requests) & Mini Automation Project"
+      ]
+    },
+    {
+      "id": 5,
+      "slug": "cloud-providers-aws",
+      "title": "Cloud Providers (AWS Core Infrastructure)",
+      "phase": "Intermediate",
+      "pdf_est_time": "4-6 weeks",
+      "planned_weeks": 4,
+      "start_day": 57,
+      "end_day": 84,
+      "primary_book": {
+        "title": "Amazon Web Services in Action (3rd Edition)",
+        "author": "Michael Wittig & Andreas Wittig",
+        "note": "Hands-on AWS architecture using AWS CLI + Free Tier / LocalStack."
+      },
+      "essential_concepts": [
+        "IAM (Users, Groups, Roles, JSON Policies, Least Privilege, AWS CLI & STS)",
+        "VPC Networking (VPCs, Public/Private Subnets, Route Tables, IGW, NAT Gateway, Security Groups vs NACLs)",
+        "EC2 (AMIs, Instance Types, SSH Keys, User Data, EBS Volumes, ALB & Auto Scaling Groups)",
+        "S3 (Buckets, Storage Classes, Bucket Policies, Versioning, Lifecycle Rules, Pre-signed URLs)",
+        "RDS (Multi-AZ vs Read Replicas, Subnet Groups, Backups, Security)",
+        "Lambda & Serverless (Functions, Execution Roles, Event Triggers, API Gateway)",
+        "CloudWatch (Metrics, Logs, Alarms, Billing Alerts) & Azure/GCP mental mapping"
+      ],
+      "weekly_breakdown": [
+        "Week 9 (Days 57-63): AWS Global Infra, IAM Deep Dive, AWS CLI & Security Best Practices",
+        "Week 10 (Days 64-70): VPC Networking from Scratch (Subnets, Routing, IGW, NAT, SGs, NACLs)",
+        "Week 11 (Days 71-77): Compute & Storage (EC2, EBS, Load Balancers, Auto Scaling, S3 Lifecycle & Policies)",
+        "Week 12 (Days 78-84): Managed Databases (RDS), Serverless (Lambda), CloudWatch Monitoring & Cloud Comparison (Azure/GCP)"
+      ]
+    },
+    {
+      "id": 6,
+      "slug": "containerization-docker",
+      "title": "Containerization (Docker)",
+      "phase": "Intermediate",
+      "pdf_est_time": "3-4 weeks",
+      "planned_weeks": 3,
+      "start_day": 85,
+      "end_day": 105,
+      "primary_book": {
+        "title": "Docker Deep Dive",
+        "author": "Nigel Poulton",
+        "note": "Short, punchy chapters covering container internals through production multi-container apps."
+      },
+      "essential_concepts": [
+        "Container internals (Linux namespaces, cgroups, overlayfs vs Virtual Machines)",
+        "Docker installation, daemon architecture & running/debugging containers",
+        "Creating & managing Docker images, layers & registries (Docker Hub, ECR, GHCR)",
+        "Dockerfile mastery (layer caching, multi-stage builds, non-root users, distroless/alpine, HEALTHCHECK)",
+        "Data persistence (managed volumes, bind mounts, tmpfs)",
+        "Container networking (bridge, host, none, user-defined networks & embedded DNS)",
+        "Docker Compose (multi-container orchestration, depends_on with healthchecks, networks, secrets)"
+      ],
+      "weekly_breakdown": [
+        "Week 13 (Days 85-91): Container Internals (Namespaces/cgroups), Docker CLI, Image Layers & Container Lifecycle",
+        "Week 14 (Days 92-98): Production Dockerfiles, Multi-Stage Builds, Image Optimization, Volumes & Container Networking",
+        "Week 15 (Days 99-105): Docker Compose Multi-Service Stacks, Image Vulnerability Scanning (Trivy) & Container Project"
+      ]
+    },
+    {
+      "id": 7,
+      "slug": "cicd-pipelines",
+      "title": "Continuous Integration / Continuous Deployment (CI/CD)",
+      "phase": "Intermediate",
+      "pdf_est_time": "3-4 weeks",
+      "planned_weeks": 3,
+      "start_day": 106,
+      "end_day": 126,
+      "primary_book": {
+        "title": "Continuous Delivery / Learning Continuous Integration with Jenkins",
+        "author": "Jez Humble & David Farley / Nikhil Pathania",
+        "note": "Covers both Jenkins (from roadmap) and GitHub Actions (modern industry standard)."
+      },
+      "essential_concepts": [
+        "CI/CD concepts & principles (Continuous Integration vs Delivery vs Deployment)",
+        "Jenkins architecture, controller/agent setup & security credentials",
+        "Creating & configuring Jenkins pipelines (Declarative & Scripted Jenkinsfile)",
+        "Automated testing stages (unit, integration, linting, SAST security scans)",
+        "Build automation & Docker image packaging/pushing in pipelines",
+        "Modern CI/CD with GitHub Actions & GitLab CI (workflows, runners, matrix builds, OIDC)",
+        "Deployment automation strategies (Blue/Green, Canary, Rolling) & pipeline notifications"
+      ],
+      "weekly_breakdown": [
+        "Week 16 (Days 106-112): CI/CD Principles, Running Jenkins in Docker, Agents, Credentials & Declarative Jenkinsfiles",
+        "Week 17 (Days 113-119): Automated Testing, Linting, Docker Builds in Jenkins, Webhooks & Shared Libraries",
+        "Week 18 (Days 120-126): GitHub Actions / GitLab CI Pipelines, Deployment Strategies (Blue/Green, Canary) & End-to-End Pipeline"
+      ]
+    },
+    {
+      "id": 8,
+      "slug": "container-orchestration-k8s",
+      "title": "Container Orchestration (Kubernetes & Helm)",
+      "phase": "Intermediate",
+      "pdf_est_time": "4-6 weeks",
+      "planned_weeks": 4,
+      "start_day": 127,
+      "end_day": 154,
+      "primary_book": {
+        "title": "The Kubernetes Book / Kubernetes Up & Running",
+        "author": "Nigel Poulton / Brendan Burns, Joe Beda, Kelsey Hightower",
+        "note": "Hands-on local cluster labs using kind / minikube / k3s."
+      },
+      "essential_concepts": [
+        "Kubernetes architecture (Control Plane: API Server, etcd, Scheduler, Controller Manager; Worker Nodes: kubelet, kube-proxy)",
+        "Core components (Pods, ReplicaSets, Deployments, StatefulSets, DaemonSets, Jobs)",
+        "Managing resources (Namespaces, ConfigMaps, Secrets, Resource Requests/Limits, Probes)",
+        "Kubernetes networking (Services: ClusterIP, NodePort, LoadBalancer; Ingress Controllers; DNS)",
+        "Storage in Kubernetes (PV, PVC, StorageClasses) & Scaling (HPA - Horizontal Pod Autoscaler)",
+        "Helm basics (Charts, templates, values.yaml, releases, repositories)",
+        "Security in Kubernetes (RBAC: Roles/ClusterRoles/ServiceAccounts, NetworkPolicies, SecurityContexts)"
+      ],
+      "weekly_breakdown": [
+        "Week 19 (Days 127-133): K8s Architecture, Local Cluster Setup (kind/minikube), Pods, Deployments & kubectl Mastery",
+        "Week 20 (Days 134-140): Services, Ingress, ConfigMaps, Secrets, Namespaces & Liveness/Readiness Probes",
+        "Week 21 (Days 141-147): Persistent Storage (PV/PVC), StatefulSets, Resource Quotas, HPA Autoscaling & Troubleshooting",
+        "Week 22 (Days 148-154): Helm Package Manager (Charts/Templates/Releases), RBAC Security & NetworkPolicies"
+      ]
+    },
+    {
+      "id": 9,
+      "slug": "networking-infrastructure-services",
+      "title": "Networking and Infrastructure Services (Nginx, Proxies, Caching)",
+      "phase": "Intermediate",
+      "pdf_est_time": "3-4 weeks",
+      "planned_weeks": 2,
+      "start_day": 155,
+      "end_day": 168,
+      "primary_book": {
+        "title": "NGINX Cookbook (O'Reilly)",
+        "author": "Derek DeJonghe",
+        "note": "Practical recipes for reverse proxying, load balancing, TLS termination & caching."
+      },
+      "essential_concepts": [
+        "Forward proxies vs Reverse proxies",
+        "Setting up and configuring Nginx as a reverse proxy (server blocks, locations, proxy headers)",
+        "Load balancing with Nginx, HAProxy & AWS ALB (Round Robin, Least Connections, Health Checks)",
+        "SSL/TLS configuration, cipher suites, Let's Encrypt certificates & mTLS",
+        "Implementing caching layers with Redis and HTTP proxy caching (Nginx/Varnish)",
+        "Rate limiting, WAF basics, firewall hardening & production network troubleshooting"
+      ],
+      "weekly_breakdown": [
+        "Week 23 (Days 155-161): Forward vs Reverse Proxies, Nginx Configuration, Upstreams, Load Balancing & HAProxy",
+        "Week 24 (Days 162-168): SSL/TLS Termination, Let's Encrypt, Redis & HTTP Caching, Rate Limiting & Edge Troubleshooting"
+      ]
+    },
+    {
+      "id": 10,
+      "slug": "configuration-management-ansible",
+      "title": "Configuration Management (Ansible)",
+      "phase": "Advanced",
+      "pdf_est_time": "3-4 weeks",
+      "planned_weeks": 2,
+      "start_day": 169,
+      "end_day": 182,
+      "primary_book": {
+        "title": "Ansible for DevOps (2nd Edition)",
+        "author": "Jeff Geerling",
+        "note": "The gold-standard practical book on Ansible playbooks, roles, and testing."
+      },
+      "essential_concepts": [
+        "Configuration management principles (Idempotency, Agentless Push vs Agent Pull: Ansible vs Puppet/Chef)",
+        "Inventories (static INI/YAML & dynamic cloud inventories) and Ad-Hoc commands",
+        "Writing Ansible Playbooks (tasks, modules, handlers, notify, become)",
+        "Managing variables, facts, conditionals (when), loops & Jinja2 templates",
+        "Secrets management with Ansible Vault",
+        "Structuring reusable Roles, Collections & testing with Molecule"
+      ],
+      "weekly_breakdown": [
+        "Week 25 (Days 169-175): Idempotency, Inventories, Ad-Hoc Commands, Playbooks, Modules, Handlers & Variables",
+        "Week 26 (Days 176-182): Jinja2 Templates, Ansible Vault, Reusable Roles, Galaxy & Multi-Server Fleet Configuration"
+      ]
+    },
+    {
+      "id": 11,
+      "slug": "infrastructure-as-code-terraform",
+      "title": "Infrastructure as Code (Terraform)",
+      "phase": "Advanced",
+      "pdf_est_time": "3-4 weeks",
+      "planned_weeks": 3,
+      "start_day": 183,
+      "end_day": 203,
+      "primary_book": {
+        "title": "Terraform: Up & Running (3rd Edition)",
+        "author": "Yevgeniy Brikman",
+        "note": "Read 1 focused section per day; the definitive guide to production Terraform."
+      },
+      "essential_concepts": [
+        "IaC concepts (Declarative vs Imperative, Idempotency, Terraform vs CloudFormation)",
+        "Terraform basics (HCL syntax, providers, resources, data sources, variables, outputs)",
+        "Core lifecycle workflow (terraform init, fmt, validate, plan, apply, destroy)",
+        "Managing Terraform State (local vs remote state in S3, state locking, drift detection, import)",
+        "Reusable Terraform Modules (inputs, outputs, versioning, composition)",
+        "Advanced HCL (count, for_each, dynamic blocks, workspaces, policy checks)"
+      ],
+      "weekly_breakdown": [
+        "Week 27 (Days 183-189): IaC Principles, HCL Syntax, Providers, Resources, Variables, Outputs & Core CLI Workflow",
+        "Week 28 (Days 190-196): Terraform State Internals, Remote Backend (S3 + Locking), State Manipulation & Loops (for_each/count)",
+        "Week 29 (Days 197-203): Writing Reusable Modules, Workspaces, Multi-Environment Architecture & CloudFormation Comparison"
+      ]
+    },
+    {
+      "id": 12,
+      "slug": "monitoring-logging-prometheus",
+      "title": "Monitoring, Logging & Final Capstone (Prometheus, Grafana, ELK)",
+      "phase": "Advanced",
+      "pdf_est_time": "3-4 weeks",
+      "planned_weeks": 3,
+      "start_day": 204,
+      "end_day": 224,
+      "primary_book": {
+        "title": "Prometheus: Up & Running (2nd Edition) & Site Reliability Engineering (Google SRE Book - Free)",
+        "author": "Julien Pivotto & Brian Brazil / Beyer et al.",
+        "note": "Combines hands-on Prometheus/Grafana/ELK setup with Google SRE observability principles."
+      },
+      "essential_concepts": [
+        "Observability fundamentals (Metrics, Logs, Traces; Four Golden Signals; RED/USE; SLIs/SLOs)",
+        "Prometheus architecture (pull model, scrape configs, metric types, node_exporter, service discovery)",
+        "PromQL (rate, irate, increase, histogram_quantile, aggregations) & Alertmanager",
+        "Grafana (data sources, dashboards, panels, variables, provisioning as code)",
+        "Centralized Logging with ELK Stack (Elasticsearch, Logstash/Fluentd, Kibana) & Grafana Loki",
+        "End-to-End Production DevOps Capstone Project"
+      ],
+      "weekly_breakdown": [
+        "Week 30 (Days 204-210): SRE Golden Signals, Prometheus Setup, Exporters, Metric Types, PromQL & Alertmanager",
+        "Week 31 (Days 211-217): Grafana Dashboards-as-Code, Centralized Logging with ELK Stack (Elasticsearch, Logstash, Kibana)",
+        "Week 32 (Days 218-224): End-to-End DevOps Capstone (Terraform + Docker + Kubernetes + CI/CD + Prometheus/Grafana) & Interview Prep"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,147 @@
+{
+  "day": 1,
+  "module_id": 1,
+  "module_title": "Linux Fundamentals & Bash Scripting",
+  "title": "The Shell, Kernel Space vs User Space & Standard Streams (stdin, stdout, stderr)",
+  "estimated_minutes": 60,
+  "why_it_matters": "As a developer, you already run commands in a terminal. As a DevOps engineer, you must understand *how* the shell talks to the Linux kernel via system calls, why exit codes ($?) drive every CI/CD pipeline, and how file descriptors (0, 1, 2) control logging, piping, and daemon output on headless production servers.",
+  "concept_explanation": [
+    "1. Kernel vs. Shell: The Linux kernel manages hardware, memory, processes, and filesystems in privileged 'Kernel Space'. Programs (like nginx, python, or bash) run in unprivileged 'User Space' and ask the kernel to do work via System Calls (open, read, write, fork, execve). Your shell (bash/zsh) is just a user-space program that parses your command, forks a child process, and waits for its exit status.",
+    "2. Command Types & PATH Lookup: Before launching an external binary, the shell checks if a command is an alias, shell function, or shell builtin (like `cd`, `export`, `echo`). Use `type -a <cmd>` and `which <cmd>` to debug why a server is running the wrong version of a tool.",
+    "3. The Three Standard File Descriptors: Every Linux process starts with three open streams:\n   - FD 0 (`stdin`): Standard Input\n   - FD 1 (`stdout`): Standard Output (buffered)\n   - FD 2 (`stderr`): Standard Error (unbuffered, so errors appear immediately)",
+    "4. Redirection & Order Matters:\n   - `cmd > file.log` redirects FD 1 (overwrite); `cmd >> file.log` appends.\n   - `cmd 2> err.log` redirects only FD 2.\n   - `cmd > all.log 2>&1` sends stdout to `all.log`, then points stderr (2) to wherever stdout (1) currently points (`all.log`). Note: `cmd 2>&1 > all.log` does NOT capture stderr in the file because 2 is pointed to the terminal before 1 is redirected!\n   - `/dev/null` is the kernel's bit-bucket device that discards anything written to it.",
+    "5. Exit Codes (`$?`) & Pipeline Pitfalls: Every command exits with 0 (success) or 1–255 (error). In a pipeline `cmd1 | cmd2`, standard bash sets `$?` to the exit code of the *last* command (`cmd2`), hiding failures in `cmd1` unless you enable `set -o pipefail`."
+  ],
+  "cheat_sheet": [
+    "type -a ls                  # Show whether a command is builtin, alias, or binary",
+    "echo $?                     # Print exit code of the previous command (0 = success)",
+    "./deploy.sh > out.log 2>&1  # Redirect both stdout and stderr to out.log",
+    "./deploy.sh 1>/dev/null     # Discard normal output, keep only errors (stderr) on screen",
+    "find /var -name '*.log' 2>/dev/null | tee found.txt  # Silence permission errors & save+print stdout"
+  ],
+  "resources": {
+    "book": {
+      "title": "The Linux Command Line (5th Internet Edition) by William Shotts",
+      "url": "https://linuxcommand.org/tlcl.php",
+      "assignment": "Read Chapter 1 ('What Is the Shell?') & Chapter 6 ('Redirection') — 14 pages total.",
+      "realistic_time": "20 mins"
+    },
+    "video": {
+      "title": "Linux Crash Course - Data Streams (stdin, stdout & stderr)",
+      "creator": "Learn Linux TV",
+      "url": "https://www.youtube.com/watch?v=zMKacHGuIHI",
+      "assignment": "Watch the full 17-minute walkthrough of stdin (0), stdout (1), stderr (2), /dev/null, and exit codes.",
+      "realistic_time": "17 mins"
+    }
+  },
+  "lab": {
+    "title": "Triage a Noisy Service Script with Streams & Exit Codes",
+    "description": "Inside `workspace/devops/day-001`, we've placed a simulated microservice health probe script `probe.sh` that emits both healthy JSON metrics (to stdout) and noisy connection errors (to stderr). Complete the tasks below using terminal commands:",
+    "tasks": [
+      "1. Run `./grow lab 1` to generate the `workspace/devops/day-001/` sandbox.",
+      "2. Execute `./probe.sh` inside `workspace/devops/day-001` and redirect ONLY its `stdout` to `metrics.txt` AND ONLY its `stderr` to `errors.log`.",
+      "3. Execute `./probe.sh` again, redirecting BOTH `stdout` and `stderr` combined into `combined.log`.",
+      "4. Extract only the lines containing `ERROR` from `errors.log`, count how many there are, and write the integer count (just the number) into `error_count.txt`.",
+      "5. Run `./grow verify 1` (or `./grow test 1` when ready for the full day test) to validate your work!"
+    ],
+    "setup_files": [
+      {
+        "path": "probe.sh",
+        "mode": 493,
+        "content": "#!/usr/bin/env bash\necho '{\"service\":\"auth\",\"status\":\"ok\",\"latency_ms\":12}'\necho '[WARN] deprecated TLSv1.1 client detected' >&2\necho '{\"service\":\"payments\",\"status\":\"ok\",\"latency_ms\":44}'\necho '[ERROR] upstream redis-02 connection timeout after 500ms' >&2\necho '{\"service\":\"inventory\",\"status\":\"ok\",\"latency_ms\":19}'\necho '[ERROR] db replica lag exceeded threshold (3200ms)' >&2\necho '[ERROR] failed to flush telemetry batch #409' >&2\nexit 0\n"
+      }
+    ],
+    "verifications": [
+      {
+        "description": "metrics.txt exists and contains only the 3 JSON stdout lines (no stderr)",
+        "type": "file_exact_lines",
+        "path": "metrics.txt",
+        "expected_lines": [
+          "{\"service\":\"auth\",\"status\":\"ok\",\"latency_ms\":12}",
+          "{\"service\":\"payments\",\"status\":\"ok\",\"latency_ms\":44}",
+          "{\"service\":\"inventory\",\"status\":\"ok\",\"latency_ms\":19}"
+        ]
+      },
+      {
+        "description": "errors.log exists and contains only the 4 stderr lines (WARN and ERROR)",
+        "type": "file_exact_lines",
+        "path": "errors.log",
+        "expected_lines": [
+          "[WARN] deprecated TLSv1.1 client detected",
+          "[ERROR] upstream redis-02 connection timeout after 500ms",
+          "[ERROR] db replica lag exceeded threshold (3200ms)",
+          "[ERROR] failed to flush telemetry batch #409"
+        ]
+      },
+      {
+        "description": "combined.log exists and contains all 7 lines (both stdout and stderr)",
+        "type": "file_line_count",
+        "path": "combined.log",
+        "expected_count": 7
+      },
+      {
+        "description": "error_count.txt contains the exact count of ERROR lines (3)",
+        "type": "file_trimmed_equals",
+        "path": "error_count.txt",
+        "expected": "3"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "question": "A junior engineer writes `backup.sh 2>&1 > /var/log/backup.log` in a cron job expecting errors to be saved to `/var/log/backup.log`. What actually happens?",
+      "options": [
+        "A) Both stdout and stderr are written to /var/log/backup.log",
+        "B) Only stdout goes to /var/log/backup.log; stderr goes to the original stdout (terminal/cron mail) because redirections are evaluated left-to-right",
+        "C) Bash throws a syntax error",
+        "D) Only stderr goes to /var/log/backup.log and stdout is discarded"
+      ],
+      "answer": "B",
+      "explanation": "Redirections are evaluated strictly left-to-right. `2>&1` points FD 2 to where FD 1 currently points (the terminal), and then `> /var/log/backup.log` changes FD 1 to the file. The correct syntax is `> /var/log/backup.log 2>&1`."
+    },
+    {
+      "question": "In a CI pipeline step running `curl -fsSL https://internal/artifact.tar.gz | tar -xz`, what happens by default in Bash if `curl` fails with exit code 22 but `tar` exits 0 (or another command at the end succeeds)?",
+      "options": [
+        "A) Bash automatically aborts the pipeline as soon as curl fails",
+        "B) The pipeline's exit code ($?) is the exit code of the last command unless `set -o pipefail` is enabled",
+        "C) The pipeline returns the sum of all exit codes",
+        "D) Bash retries the first command three times"
+      ],
+      "answer": "B",
+      "explanation": "By default in POSIX sh and Bash, a pipeline's exit status is the exit status of the LAST command in the pipeline. Always use `set -euo pipefail` in DevOps scripts so upstream failures fail the pipeline."
+    },
+    {
+      "question": "Which command accurately reveals whether `cd` or `time` is a shell builtin, an alias, a function, or an external binary on disk?",
+      "options": [
+        "A) whereis",
+        "B) type -a",
+        "C) locate",
+        "D) ls -l /bin"
+      ],
+      "answer": "B",
+      "explanation": "`type -a <name>` inspects the shell's internal table (aliases, keywords, functions, builtins) as well as all matching binaries in `$PATH`."
+    },
+    {
+      "question": "What are the numeric file descriptors for stdin, stdout, and stderr respectively?",
+      "options": [
+        "A) 1, 2, 3",
+        "B) 0, 1, 2",
+        "C) 0, 2, 1",
+        "D) -1, 0, 1"
+      ],
+      "answer": "B",
+      "explanation": "POSIX standard file descriptors are 0 for stdin, 1 for stdout, and 2 for stderr."
+    },
+    {
+      "question": "You want a command's stdout to be BOTH displayed live on the terminal AND written to `deploy.log`. Which utility in a pipeline achieves this?",
+      "options": [
+        "A) xargs",
+        "B) cat",
+        "C) tee",
+        "D) cut"
+      ],
+      "answer": "C",
+      "explanation": "`tee` reads from standard input and writes to both standard output and one or more files simultaneously (like a T-splitter in plumbing)."
+    }
+  ]
+}

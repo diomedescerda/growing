@@ -1,0 +1,171 @@
+{
+  "day": 7,
+  "module_id": 1,
+  "module_title": "Linux Fundamentals & Bash Scripting",
+  "title": "Week 1 Synthesis & Production Server Incident Audit",
+  "estimated_minutes": 60,
+  "why_it_matters": "Real production incidents never test just one command in isolation. Today you'll combine streams, FHS knowledge, symlinks, inodes, special permissions, and `find` to remediate a broken microservice deployment directory.",
+  "concept_explanation": [
+    "1. Week 1 Mental Model Review:\n   - **Streams & Exit Codes**: `0=stdin`, `1=stdout`, `2=stderr`, `$?` exit code, `> file 2>&1`, `set -euo pipefail`.\n   - **FHS & Virtual FS**: `/etc` (static config), `/var` (variable logs/state), `/proc` & `/sys` (live kernel state in RAM).\n   - **Inodes & Links**: Directories map `name -> inode`. Hard links share an inode on the same FS; symlinks (`ln -sfn`) hold a target path and enable atomic deployments.\n   - **Permissions & Special Bits**: Octal `4=r, 2=w, 1=x`; leading octal `4=SUID, 2=SGID, 1=Sticky Bit`. Directories require `x` to traverse and `w` to create/delete entries.\n   - **Bulk Discovery & Archiving**: `find` with `-type`, `-size`, `-mtime`, `-perm`, `-exec ... +`, `xargs -0`, and `tar -czf / -tzf / -xzf`.",
+    "2. Production Triage Workflow: Always inspect before mutating (`ls -la`, `stat`, `find`, `df -hT`, `df -i`), fix permissions to least privilege, repoint release symlinks atomically, and verify with automated health checks."
+  ],
+  "cheat_sheet": [
+    "ln -sfn releases/2026-11-09 current           # Atomic symlink switch",
+    "find . -type f -perm /4000                    # Find any file with SUID bit set",
+    "chmod 0600 secrets/*.key && chmod 0755 bin/*  # Lock down keys and make scripts executable",
+    "tar -czf audit_snapshot.tar.gz current/       # Archive current release"
+  ],
+  "resources": {
+    "book": {
+      "title": "How Linux Works (3rd Edition) by Brian Ward / The Linux Command Line",
+      "url": "https://linuxcommand.org/tlcl.php",
+      "assignment": "Review your Week 1 notes & skim Chapter 10 of The Linux Command Line (previewing Processes for Week 2, ~10 pages).",
+      "realistic_time": "15 mins"
+    },
+    "video": {
+      "title": "How to Archive Folders in Linux (tar and gzip tutorial) - Linux Crash Course Series",
+      "creator": "Learn Linux TV",
+      "url": "https://www.youtube.com/watch?v=2iwumBcfd58",
+      "assignment": "Watch the practical tutorial on creating, inspecting, and extracting .tar and .tar.gz archives on Linux servers.",
+      "realistic_time": "25 mins"
+    }
+  },
+  "lab": {
+    "title": "Week 1 Boss Challenge: Remediate a Broken Production Node Layout",
+    "description": "Inside `workspace/devops/day-007`, a deployment to `srv_app/` failed halfway through. Fix all 4 issues below to bring the node back to compliance:",
+    "tasks": [
+      "1. Run `./grow lab 7` to generate `workspace/devops/day-007/srv_app`.",
+      "2. Repoint the broken symlink `srv_app/current` so it points to `releases/v3` (so `cat srv_app/current/release.txt` outputs `v3-production`).",
+      "3. Lock down `srv_app/secrets/tls.key` to octal mode `0600`, and configure `srv_app/shared_uploads` with SGID + `rwxrwxr-x` (`2775`).",
+      "4. Delete all `.corrupt` files anywhere inside `srv_app/releases/v3/`.",
+      "5. Run `srv_app/bin/healthcheck.sh`, capturing ONLY its `stdout` to `workspace/devops/day-007/health_ok.txt` and its `stderr` to `workspace/devops/day-007/health_err.log`.",
+      "6. Run `./grow verify 7` or `./grow test 7` to pass Week 1!"
+    ],
+    "setup_files": [
+      {
+        "path": "srv_app/releases/v2/release.txt",
+        "content": "v2-deprecated\n"
+      },
+      {
+        "path": "srv_app/releases/v3/release.txt",
+        "content": "v3-production\n"
+      },
+      {
+        "path": "srv_app/releases/v3/cache_01.corrupt",
+        "content": "bad\n"
+      },
+      {
+        "path": "srv_app/releases/v3/nested/cache_02.corrupt",
+        "content": "bad\n"
+      },
+      {
+        "path": "srv_app/secrets/tls.key",
+        "mode": 511,
+        "content": "PRIVATE_TLS_KEY\n"
+      },
+      {
+        "path": "srv_app/shared_uploads/.keep",
+        "mode": 493,
+        "content": "uploads\n"
+      },
+      {
+        "path": "srv_app/bin/healthcheck.sh",
+        "mode": 493,
+        "content": "#!/usr/bin/env bash\necho 'STATUS=HEALTHY RELEASE=v3'\necho 'WARN: debug tracing active on fd2' >&2\n"
+      },
+      {
+        "path": "srv_app/current",
+        "symlink_to": "releases/v2"
+      }
+    ],
+    "verifications": [
+      {
+        "description": "srv_app/current symlink points to releases/v3 (release.txt == v3-production)",
+        "type": "symlink_resolves_content",
+        "path": "srv_app/current/release.txt",
+        "expected": "v3-production"
+      },
+      {
+        "description": "srv_app/secrets/tls.key has mode 600",
+        "type": "file_mode",
+        "path": "srv_app/secrets/tls.key",
+        "expected_octal": "600"
+      },
+      {
+        "description": "srv_app/shared_uploads has mode 2775 (SGID)",
+        "type": "file_mode",
+        "path": "srv_app/shared_uploads",
+        "expected_octal": "2775"
+      },
+      {
+        "description": "All .corrupt files in srv_app/releases/v3 have been removed",
+        "type": "no_matching_files",
+        "dir": "srv_app/releases/v3",
+        "extension": ".corrupt"
+      },
+      {
+        "description": "health_ok.txt contains stdout ('STATUS=HEALTHY RELEASE=v3') and health_err.log contains stderr",
+        "type": "file_trimmed_equals",
+        "path": "health_ok.txt",
+        "expected": "STATUS=HEALTHY RELEASE=v3"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "question": "You want to atomically switch `/var/www/current` from `/var/www/releases/v1` to `/var/www/releases/v2` without `ln` creating a `v2` symlink *inside* the `v1` directory. Which flags are required?",
+      "options": [
+        "A) ln -r",
+        "B) ln -sfn",
+        "C) ln -hard",
+        "D) ln -d"
+      ],
+      "answer": "B",
+      "explanation": "`-s` (symbolic), `-f` (force overwrite), and `-n` (`--no-dereference`, treat an existing symlink-to-directory as a file to replace rather than descending into it)."
+    },
+    {
+      "question": "A daemon running as user `www-data` (UID 33, GID 33) needs to read `/etc/ssl/private/app.key` owned by `root:ssl-cert` with mode `0640`. Nothing else should have access. What is the cleanest Linux fix?",
+      "options": [
+        "A) chmod 0777 /etc/ssl/private/app.key",
+        "B) Add user `www-data` to the supplementary group `ssl-cert` (`usermod -aG ssl-cert www-data`) and ensure `/etc/ssl/private` allows group traversal (`0710` or `0750`)",
+        "C) Run the web server as `root`",
+        "D) Set SUID on `/etc/ssl/private/app.key`"
+      ],
+      "answer": "B",
+      "explanation": "Adding the service user to the `ssl-cert` group (`usermod -aG`) leverages group read permission (`0640`) without exposing the private key to other users on the machine."
+    },
+    {
+      "question": "Why must you NEVER run `usermod -G docker kenma` without the `-a` (append) flag?",
+      "options": [
+        "A) `-G` without `-a` overwrites and removes the user from all their existing supplementary groups (including `sudo`/`wheel`)!",
+        "B) `-G` deletes the user's home directory",
+        "C) `-G` only works on Alpine Linux",
+        "D) `-a` stands for admin"
+      ],
+      "answer": "A",
+      "explanation": "A classic sysadmin rite of passage! `usermod -G group user` replaces the entire supplementary group list, removing `sudo` access. Always use `usermod -aG group user`."
+    },
+    {
+      "question": "Which directory holds live kernel tunable parameters (such as `net/ipv4/ip_forward`) that can be read as files or modified via `sysctl`?",
+      "options": [
+        "A) /var/kernel",
+        "B) /proc/sys",
+        "C) /usr/include/sys",
+        "D) /etc/kernel/live"
+      ],
+      "answer": "B",
+      "explanation": "`/proc/sys` exposes live kernel tunables; for example, `sysctl net.ipv4.ip_forward=1` writes `1` to `/proc/sys/net/ipv4/ip_forward`."
+    },
+    {
+      "question": "If `cmd1 | cmd2 | cmd3` is run in a Bash script with `set -euo pipefail`, and `cmd2` exits with code 1 while `cmd1` and `cmd3` exit with 0, what is the exit status of the pipeline?",
+      "options": [
+        "A) 0",
+        "B) 1 (and the script exits immediately due to `set -e` + `pipefail`)",
+        "C) 255",
+        "D) Ignored unless `cmd3` fails"
+      ],
+      "answer": "B",
+      "explanation": "With `pipefail` enabled, the pipeline returns the rightmost non-zero exit code (`1` from `cmd2`), which triggers `set -e` (`errexit`) to abort the script immediately."
+    }
+  ]
+}

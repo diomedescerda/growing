@@ -1,0 +1,147 @@
+{
+  "day": 2,
+  "module_id": 1,
+  "module_title": "Linux Fundamentals & Bash Scripting",
+  "title": "The Linux File System Hierarchy (FHS) & Virtual Filesystems (/proc, /sys)",
+  "estimated_minutes": 60,
+  "why_it_matters": "When an alert fires at 2 AM saying a production node's disk is full or a config file is corrupt, a DevOps engineer immediately knows where to look. Understanding `/etc`, `/var`, `/opt`, `/usr`, `/tmp`, and kernel pseudo-filesystems (`/proc`, `/sys`) is foundational to Linux administration and Docker container internals.",
+  "concept_explanation": [
+    "1. Everything Is a File: In Linux, regular files, directories, block devices (disks like `/dev/sda`), sockets, pipes, and even live kernel state (`/proc`) are represented as nodes in a single unified tree rooted at `/`.",
+    "2. Critical FHS Directories Every DevOps Engineer Lives In:\n   - `/etc`: System-wide static configuration files (e.g., `/etc/nginx/`, `/etc/systemd/system/`, `/etc/hosts`, `/etc/fstab`). Never put binaries here.\n   - `/var`: Variable data that grows at runtime—logs (`/var/log`), Docker data (`/var/lib/docker`), spool queues, caches. When disk fills up in production, `/var` is suspect #1.\n   - `/usr`: Read-only user binaries (`/usr/bin`), system admin binaries (`/usr/sbin`), and libraries (`/usr/lib`). On modern distros, `/bin` and `/sbin` are symlinks to `/usr/bin` and `/usr/sbin` (UsrMerge).\n   - `/opt` vs `/usr/local`: `/opt` holds self-contained third-party packages (e.g., `/opt/datadog-agent`); `/usr/local` holds software compiled/installed locally by the sysadmin.\n   - `/tmp` vs `/var/tmp`: `/tmp` is often mounted in RAM (`tmpfs`) and wiped on reboot; `/var/tmp` persists across reboots.",
+    "3. Kernel Virtual Filesystems (`/proc` and `/sys`):\n   - `/proc` takes 0 bytes on disk! It is a live window into the kernel created in RAM. `/proc/cpuinfo`, `/proc/meminfo`, and `/proc/<PID>/` let tools like `ps`, `top`, and Prometheus `node_exporter` read system metrics.\n   - `/proc/sys` (managed via `sysctl`) lets you tune live kernel networking and memory parameters (e.g., enabling IP forwarding for Kubernetes nodes).",
+    "4. Inspecting Mounts & Disk Usage:\n   - `df -hT`: Shows mounted filesystems, filesystem types (`ext4`, `xfs`, `tmpfs`), and free disk space.\n   - `du -sh /path/* | sort -h`: Calculates actual directory sizes on disk to hunt down space hogs."
+  ],
+  "cheat_sheet": [
+    "df -hT                           # Free disk space and filesystem types per mount",
+    "du -xhd 1 /var 2>/dev/null | sort -h  # Find largest subdirectories without crossing mounts",
+    "cat /proc/meminfo | head -n 5    # Read live memory metrics straight from the kernel",
+    "ls -l /proc/$$/fd                # Inspect open file descriptors of your current shell",
+    "findmnt                          # Tree view of all mounted filesystems"
+  ],
+  "resources": {
+    "book": {
+      "title": "The Linux Command Line (5th Internet Edition) by William Shotts",
+      "url": "https://linuxcommand.org/tlcl.php",
+      "assignment": "Read Chapter 2 ('Navigation') & Chapter 3 ('Exploring the System') — 13 pages total.",
+      "realistic_time": "20 mins"
+    },
+    "video": {
+      "title": "Linux File System/Structure Explained!",
+      "creator": "DorianDotSlash",
+      "url": "https://www.youtube.com/watch?v=HbgzrKJvDRw",
+      "assignment": "Watch the 16-minute walkthrough of /, /bin, /etc, /var, /opt, /usr, and /proc.",
+      "realistic_time": "16 mins"
+    }
+  },
+  "lab": {
+    "title": "Query Live Kernel Telemetry from /proc & Audit Simulated Server Directories",
+    "description": "Practice inspecting real kernel pseudo-files and locating bloated directories inside `workspace/devops/day-002`:",
+    "tasks": [
+      "1. Run `./grow lab 2` to initialize `workspace/devops/day-002`.",
+      "2. Read `/proc/version` on your machine and save its exact single-line output into `workspace/devops/day-002/kernel_version.txt`.",
+      "3. Inside `workspace/devops/day-002/simulated_var`, there are 4 subdirectories (`cache`, `log`, `lib`, `spool`). Use `du` to find which subdirectory uses the most disk space, and write ONLY its directory name (e.g., `cache`, `log`, `lib`, or `spool`) into `workspace/devops/day-002/largest_dir.txt`.",
+      "4. Create a file `workspace/devops/day-002/fhs_map.txt` with 3 lines mapping the right FHS path to its role in the format:\n   config=/etc\n   logs=/var/log\n   virtual_kernel=/proc",
+      "5. Run `./grow verify 2` or `./grow test 2`."
+    ],
+    "setup_files": [
+      {
+        "path": "simulated_var/cache/pkg.bin",
+        "content": "SMALL_CACHE_DATA\n"
+      },
+      {
+        "path": "simulated_var/spool/mail.txt",
+        "content": "SMALL_SPOOL_DATA\n"
+      },
+      {
+        "path": "simulated_var/lib/state.db",
+        "content": "MEDIUM_STATE_DATA_1234567890\n"
+      },
+      {
+        "path": "simulated_var/log/app-bloated.log",
+        "content": "BLOATED_LOG_LINE_0000000000000000000000000000000000000000000000000000000000000000\nBLOATED_LOG_LINE_0000000000000000000000000000000000000000000000000000000000000000\nBLOATED_LOG_LINE_0000000000000000000000000000000000000000000000000000000000000000\nBLOATED_LOG_LINE_0000000000000000000000000000000000000000000000000000000000000000\nBLOATED_LOG_LINE_0000000000000000000000000000000000000000000000000000000000000000\nBLOATED_LOG_LINE_0000000000000000000000000000000000000000000000000000000000000000\n",
+        "repeat": 120
+      }
+    ],
+    "verifications": [
+      {
+        "description": "kernel_version.txt contains live Linux version string from /proc/version",
+        "type": "file_contains",
+        "path": "kernel_version.txt",
+        "expected_substring": "Linux version"
+      },
+      {
+        "description": "largest_dir.txt correctly identifies 'log' as the largest subdirectory",
+        "type": "file_trimmed_equals",
+        "path": "largest_dir.txt",
+        "expected": "log"
+      },
+      {
+        "description": "fhs_map.txt maps config=/etc, logs=/var/log, virtual_kernel=/proc",
+        "type": "file_exact_lines",
+        "path": "fhs_map.txt",
+        "expected_lines": [
+          "config=/etc",
+          "logs=/var/log",
+          "virtual_kernel=/proc"
+        ]
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "question": "Why does `/proc/kcore` sometimes show as terabytes in size with `ls -lh`, yet takes 0 bytes of your disk space?",
+      "options": [
+        "A) It is compressed with zstd on the ext4 partition",
+        "B) `/proc` is a virtual filesystem (`procfs`) generated dynamically in RAM by the kernel, not stored on block storage",
+        "C) It is stored on the swap partition",
+        "D) Linux hides its disk usage from `df`"
+      ],
+      "answer": "B",
+      "explanation": "`/proc` (`procfs`) is a virtual filesystem in memory that exposes kernel data structures and process info dynamically."
+    },
+    {
+      "question": "According to the Filesystem Hierarchy Standard (FHS), where does Docker store its images, containers, and local volumes by default on a Linux host?",
+      "options": [
+        "A) /etc/docker",
+        "B) /usr/local/docker",
+        "C) /var/lib/docker",
+        "D) /opt/docker"
+      ],
+      "answer": "C",
+      "explanation": "`/var/lib/<service>` holds persistent dynamic state data for system services (like `/var/lib/docker`, `/var/lib/postgresql`, `/var/lib/kubelet`). `/etc/docker` only holds static daemon configuration (`daemon.json`)."
+    },
+    {
+      "question": "A production server's `/tmp` directory holds important intermediate artifacts, and the server reboots after a kernel update. What is most likely to happen to `/tmp` vs `/var/tmp`?",
+      "options": [
+        "A) Both are wiped on reboot",
+        "B) `/tmp` is wiped on reboot (often backed by RAM `tmpfs`), whereas `/var/tmp` is preserved across reboots",
+        "C) `/var/tmp` is wiped on reboot, whereas `/tmp` is preserved forever",
+        "D) Neither is ever cleaned automatically"
+      ],
+      "answer": "B",
+      "explanation": "FHS specifies that `/tmp` may be cleared at boot (and modern systemd distros mount `/tmp` as `tmpfs` in RAM), while `/var/tmp` is for temporary files that must survive a reboot."
+    },
+    {
+      "question": "Where are static system-wide configuration files (such as `fstab`, `resolv.conf`, `ssh/sshd_config`) stored?",
+      "options": [
+        "A) /var/conf",
+        "B) /sys/config",
+        "C) /etc",
+        "D) /usr/etc"
+      ],
+      "answer": "C",
+      "explanation": "`/etc` is the central location for host-specific system-wide configuration files."
+    },
+    {
+      "question": "Which command shows the mounted filesystems along with their filesystem type (e.g., ext4, xfs, tmpfs) in human-readable sizes?",
+      "options": [
+        "A) du -sh",
+        "B) df -hT",
+        "C) lsblk -a",
+        "D) free -m"
+      ],
+      "answer": "B",
+      "explanation": "`df -hT` reports filesystem disk space usage (`-h` human-readable) and prints the filesystem type (`-T`)."
+    }
+  ]
+}

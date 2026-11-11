@@ -1,0 +1,153 @@
+{
+  "day": 4,
+  "module_id": 1,
+  "module_title": "Linux Fundamentals & Bash Scripting",
+  "title": "Permissions, Ownership (`chmod`, `chown`, `chgrp`) & Default Masks (`umask`)",
+  "estimated_minutes": 60,
+  "why_it_matters": "Misconfigured permissions either break deployments (`Permission denied` when a container or service account tries to read a socket/secret) or create fatal security holes (`0777` on SSH keys, resulting in OpenSSH refusing to connect with `UNPROTECTED PRIVATE KEY FILE!`).",
+  "concept_explanation": [
+    "1. Users, Groups & UIDs/GIDs: The Linux kernel doesn't care about usernames like `ubuntu` or `nginx`; it checks numeric **UID** (User ID) and **GID** (Group ID) stored in `/etc/passwd` and `/etc/group`. `root` is always UID 0. System/service accounts typically have UIDs < 1000 and shell `/usr/sbin/nologin`.",
+    "2. The 9 Permission Bits (User / Group / Others):\n   - Read (`r` = 4), Write (`w` = 2), Execute (`x` = 1).\n   - **Crucial Distinction — Files vs. Directories**:\n     - On a **file**: `r` = read content, `w` = modify content, `x` = run as program.\n     - On a **directory**: `r` = list filenames (`ls`), `w` = create/delete/rename files inside the directory (even if you don't own the file!), `x` = traverse/enter (`cd`) and access inode metadata of files inside.",
+    "3. Octal vs Symbolic `chmod`:\n   - `chmod 600 id_ed25519` (`rw-------`): Only owner can read/write (mandatory for SSH private keys).\n   - `chmod 644 config.yaml` (`rw-r--r--`): Standard config file.\n   - `chmod 755 deploy.sh` (`rwxr-xr-x`): Standard executable script or public directory.\n   - `chmod -R u+rwX,go+rX,go-w /var/www`: Capital `X` adds execute permission ONLY to directories (and files already executable), avoiding making every `.html` file executable!",
+    "4. Default Creation Mask (`umask`): New files default to base `0666` and directories to `0777`, minus the process `umask`. With standard `umask 0022`, new files get `0644` and directories get `0755`."
+  ],
+  "cheat_sheet": [
+    "id                              # Print current user's UID, GID, and supplementary groups",
+    "chmod 600 ~/.ssh/id_ed25519     # Lock down SSH private key (rw-------)",
+    "chmod 750 /etc/app              # Owner rwx, Group r-x, Others none (rwxr-x---)",
+    "chown -R appuser:appgroup /srv  # Recursively change owner and group",
+    "stat -c '%a %U:%G %n' *         # Print octal permissions and owner:group for all files"
+  ],
+  "resources": {
+    "book": {
+      "title": "The Linux Command Line (5th Internet Edition) by William Shotts",
+      "url": "https://linuxcommand.org/tlcl.php",
+      "assignment": "Read Chapter 9 ('Permissions' — first two-thirds covering `chmod`, octal modes, `umask`, and `chown`, ~14 pages).",
+      "realistic_time": "20 mins"
+    },
+    "video": {
+      "title": "Linux Commands for Beginners 09 - Understanding Permissions",
+      "creator": "Learn Linux TV",
+      "url": "https://www.youtube.com/watch?v=T269zebUSj8",
+      "assignment": "Watch the 17-minute practical walkthrough of rwx permissions, chmod, chown, and octal notation.",
+      "realistic_time": "17 mins"
+    }
+  },
+  "lab": {
+    "title": "Harden an Exposed Deployment Directory",
+    "description": "A junior developer deployed an app into `workspace/devops/day-004` using `chmod -R 777`! Fix the security posture to exact production standards:",
+    "tasks": [
+      "1. Run `./grow lab 4` to generate the insecure files in `workspace/devops/day-004`.",
+      "2. Lock down `id_rsa_deploy` so ONLY the file owner has read and write permissions (`0600` / `-rw-------`).",
+      "3. Set `config.env` so the owner has read/write, the group has read-only, and others have NO permissions (`0640` / `-rw-r-----`).",
+      "4. Set `start_server.sh` so the owner has rwx, group has r-x, and others have r-x (`0755` / `-rwxr-xr-x`).",
+      "5. Set the `secrets_vault` directory so ONLY the owner has rwx and group/others have zero access (`0700` / `drwx------`).",
+      "6. Run `./grow verify 4` or `./grow test 4`."
+    ],
+    "setup_files": [
+      {
+        "path": "id_rsa_deploy",
+        "mode": 511,
+        "content": "-----BEGIN OPENSSH PRIVATE KEY-----\nDUMMY_DEPLOY_KEY_NEVER_777\n-----END OPENSSH PRIVATE KEY-----\n"
+      },
+      {
+        "path": "config.env",
+        "mode": 511,
+        "content": "DB_PASSWORD=super_secret_prod_pw\n"
+      },
+      {
+        "path": "start_server.sh",
+        "mode": 438,
+        "content": "#!/usr/bin/env bash\necho 'Server started'\n"
+      },
+      {
+        "path": "secrets_vault/.keep",
+        "mode": 420,
+        "content": "vault\n"
+      }
+    ],
+    "verifications": [
+      {
+        "description": "id_rsa_deploy has exact octal mode 600 (-rw-------)",
+        "type": "file_mode",
+        "path": "id_rsa_deploy",
+        "expected_octal": "600"
+      },
+      {
+        "description": "config.env has exact octal mode 640 (-rw-r-----)",
+        "type": "file_mode",
+        "path": "config.env",
+        "expected_octal": "640"
+      },
+      {
+        "description": "start_server.sh has exact octal mode 755 (-rwxr-xr-x)",
+        "type": "file_mode",
+        "path": "start_server.sh",
+        "expected_octal": "755"
+      },
+      {
+        "description": "secrets_vault directory has exact octal mode 700 (drwx------)",
+        "type": "file_mode",
+        "path": "secrets_vault",
+        "expected_octal": "700"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "question": "A file `/srv/app/important.conf` is owned by `root:root` with mode `0400` (`-r--------`). However, the directory `/srv/app` is owned by `deploy:deploy` with mode `0775`. Can the `deploy` user delete `important.conf`?",
+      "options": [
+        "A) No, because `important.conf` is owned by root and read-only (`0400`)",
+        "B) Yes! Deleting a file modifies the parent directory's entry table, which only requires write + execute (`wx`) permission on the parent directory (`/srv/app`)",
+        "C) Only if `deploy` knows root's password",
+        "D) No, Linux prevents non-root users from unlinking root-owned inodes in normal directories"
+      ],
+      "answer": "B",
+      "explanation": "Deleting (`unlink`) or renaming a file does NOT modify the file itself—it modifies the parent directory! If a user has `w` and `x` on the directory (and the sticky bit is not set), they can delete any file inside it regardless of who owns the file."
+    },
+    {
+      "question": "What permission bit is required on a directory in order to `cd` into it or `stat` a known file inside it?",
+      "options": [
+        "A) Read (r / 4)",
+        "B) Write (w / 2)",
+        "C) Execute (x / 1)",
+        "D) SUID (4000)"
+      ],
+      "answer": "C",
+      "explanation": "On a directory, the execute bit (`x`) is the 'search/traverse' bit. Without `x`, you cannot `cd` into the directory or access the inodes of any files inside it, even if you have `r`."
+    },
+    {
+      "question": "If a service runs with `umask 0027`, what permissions will newly created files and directories receive by default?",
+      "options": [
+        "A) Files: 0640 (rw-r-----), Directories: 0750 (rwxr-x---)",
+        "B) Files: 0750 (rwxr-x---), Directories: 0750 (rwxr-x---)",
+        "C) Files: 0644 (rw-r--r--), Directories: 0755 (rwxr-xr-x)",
+        "D) Files: 0600 (rw-------), Directories: 0700 (rwx------)"
+      ],
+      "answer": "A",
+      "explanation": "Base file mode `0666 & ~0027 = 0640` (`rw-r-----`), and base directory mode `0777 & ~0027 = 0750` (`rwxr-x---`)."
+    },
+    {
+      "question": "Why does `ssh -i mykey.pem ubuntu@server` fail if `mykey.pem` has permissions `0644`?",
+      "options": [
+        "A) Private keys must be executable (`0755`)",
+        "B) OpenSSH enforces strict security checks and refuses to use a private key if group or others have any read/write/execute access (must be `0600` or `0400`)",
+        "C) SSH keys must be owned by root",
+        "D) `.pem` files are not supported by OpenSSH"
+      ],
+      "answer": "B",
+      "explanation": "OpenSSH prints `WARNING: UNPROTECTED PRIVATE KEY FILE!` and rejects any key readable by group or others (`0644`). Locking it to `chmod 600` or `chmod 400` fixes it."
+    },
+    {
+      "question": "Inside a Docker container running as UID `1001`, the process tries to write to a host bind-mounted directory owned by UID `1000` with mode `0755`. Why does it fail with `Permission denied`?",
+      "options": [
+        "A) Docker containers cannot write to host disks",
+        "B) The Linux kernel checks numeric UIDs across container namespaces; UID 1001 is neither owner (1000) nor has write access under `0755` (`r-x` for others)",
+        "C) `0755` disables writing for everyone including owner",
+        "D) Bind mounts are always read-only"
+      ],
+      "answer": "B",
+      "explanation": "Containers share the host kernel! UID 1001 inside the container is evaluated by the host kernel against the directory's owner UID 1000. Under `0755`, UID 1001 falls into 'others' (`r-x`), lacking `w`."
+    }
+  ]
+}

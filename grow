@@ -1,0 +1,1131 @@
+#!/usr/bin/env python3
+"""
+grow — Generic Terminal Learning, Lab Verification & Daily Accountability Engine.
+Designed for daily terminal mastery + OpenCode AI mentor integration.
+"""
+
+import argparse
+import datetime
+import json
+import os
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tarfile
+import textwrap
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parent
+DATA_DIR = ROOT_DIR / "data"
+CONFIG_FILE = DATA_DIR / "config.json"
+USERS_DIR = DATA_DIR / "users"
+LEGACY_DATA_FILE = DATA_DIR / "state.json"
+PERSISTED_USER = "diomedes"
+DEFAULT_USER = "local"
+TRACKS_DIR = ROOT_DIR / "tracks"
+WORKSPACE_DIR = ROOT_DIR / "workspace"
+
+# ANSI styling
+RESET = "\033[0m"
+BOLD = "\033[1m"
+DIM = "\033[2m"
+CYAN = "\033[36m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+RED = "\033[31m"
+MAGENTA = "\033[35m"
+BLUE = "\033[34m"
+BG_GREEN = "\033[42m\033[30m"
+BG_YELLOW = "\033[43m\033[30m"
+BG_RED = "\033[41m\033[37m"
+BG_CYAN = "\033[46m\033[30m"
+
+
+def today_str() -> str:
+    return datetime.date.today().isoformat()
+
+
+def sanitize_username(name: str) -> str:
+    cleaned = re.sub(r"[^a-z0-9_-]", "", (name or "").strip().lower())
+    return cleaned or DEFAULT_USER
+
+
+def load_config() -> dict:
+    if CONFIG_FILE.exists():
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            pass
+    return {"user": DEFAULT_USER, "auto_sync": False}
+
+
+def save_config(cfg: dict) -> None:
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
+
+
+def get_active_user() -> str:
+    env_user = os.environ.get("GROW_USER")
+    if env_user:
+        return sanitize_username(env_user)
+    cfg = load_config()
+    return sanitize_username(cfg.get("user", DEFAULT_USER))
+
+
+def is_persisted_user(user: str | None = None) -> bool:
+    u = sanitize_username(user) if user else get_active_user()
+    return u == PERSISTED_USER
+
+
+def get_state_file(user: str | None = None) -> Path:
+    u = sanitize_username(user) if user else get_active_user()
+    return USERS_DIR / f"{u}.json"
+
+
+def load_state() -> dict:
+    state_file = get_state_file()
+    if not state_file.exists():
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        if LEGACY_DATA_FILE.exists():
+            with open(LEGACY_DATA_FILE, "r", encoding="utf-8") as f:
+                legacy_state = json.load(f)
+            save_state(legacy_state)
+            return legacy_state
+        default_state = {
+            "active_track": "devops",
+            "created_at": today_str(),
+            "tracks": {
+                "devops": {
+                    "current_day": 1,
+                    "started_at": today_str(),
+                    "last_checkin_date": None,
+                    "current_streak": 0,
+                    "longest_streak": 0,
+                    "xp": 0,
+                    "completed_days": {},
+                    "daily_logs": [],
+                }
+            },
+        }
+        save_state(default_state)
+        return default_state
+    with open(state_file, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_state(state: dict) -> None:
+    state_file = get_state_file()
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(state_file, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2)
+
+
+def get_active_track_And_progress(state: dict) -> tuple[str, dict, dict]:
+    track_id = state.get("active_track", "devops")
+    track_file = TRACKS_DIR / track_id / "track.json"
+    if not track_file.exists():
+        print(f"{RED}Error: Track '{track_id}' not found at {track_file}{RESET}")
+        sys.exit(1)
+    with open(track_file, "r", encoding="utf-8") as f:
+        track_meta = json.load(f)
+    if track_id not in state["tracks"]:
+        state["tracks"][track_id] = {
+            "current_day": 1,
+            "started_at": today_str(),
+            "last_checkin_date": None,
+            "current_streak": 0,
+            "longest_streak": 0,
+            "xp": 0,
+            "completed_days": {},
+            "daily_logs": [],
+        }
+        save_state(state)
+    return track_id, track_meta, state["tracks"][track_id]
+
+
+def load_day(track_id: str, day_num: int) -> dict | None:
+    day_file = TRACKS_DIR / track_id / "days" / f"day-{day_num:03d}.json"
+    if not day_file.exists():
+        return None
+    with open(day_file, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def progress_bar(done: int, total: int, width: int = 24) -> str:
+    total = max(total, 1)
+    ratio = min(max(done / total, 0.0), 1.0)
+    filled = int(round(ratio * width))
+    bar = f"{GREEN}{'█' * filled}{DIM}{'░' * (width - filled)}{RESET}"
+    pct = ratio * 100
+    return f"[{bar}] {done}/{total} ({pct:.1f}%)"
+
+
+def evaluate_accountability(progress: dict) -> tuple[str, int]:
+    """Returns an accountability banner and effective current streak."""
+    last_str = progress.get("last_checkin_date")
+    streak = progress.get("current_streak", 0)
+    today = datetime.date.today()
+
+    if not last_str:
+        return (
+            f"{YELLOW}⚡ DAY 1 AWAITS: You haven't logged your first check-in yet. Start today with `grow lesson`!{RESET}",
+            0,
+        )
+
+    last_date = datetime.date.fromisoformat(last_str)
+    delta = (today - last_date).days
+
+    if delta == 0:
+        return (
+            f"{GREEN}✅ ACCOUNTABILITY CHECK PASSED: You showed up today ({today_str()})! Streak: {streak} day(s) 🔥{RESET}",
+            streak,
+        )
+    elif delta == 1:
+        return (
+            f"{YELLOW}⏳ DUE TODAY: Last check-in was yesterday ({last_str}). Pass today's test to hit {streak + 1} days in a row! 🔥{RESET}",
+            streak,
+        )
+    elif delta > 1:
+        missed = delta - 1
+        return (
+            f"{RED}🚨 ACCOUNTABILITY ALERT: You missed {missed} day(s) since {last_str}! Your {streak}-day streak was broken. Rebuild it TODAY!{RESET}",
+            0,
+        )
+    else:
+        return (f"{GREEN}✅ Last check-in: {last_str} (Streak: {streak} 🔥){RESET}", streak)
+
+
+def render_heatmap(progress: dict, days_to_show: int = 28) -> str:
+    today = datetime.date.today()
+    logged_dates = {entry["date"] for entry in progress.get("daily_logs", [])}
+    started_str = progress.get("started_at", today.isoformat())
+    try:
+        started_date = datetime.date.fromisoformat(started_str)
+    except ValueError:
+        started_date = today
+
+    cells = []
+    for offset in range(days_to_show - 1, -1, -1):
+        d = today - datetime.timedelta(days=offset)
+        d_str = d.isoformat()
+        if d_str in logged_dates:
+            cells.append(f"{GREEN}■{RESET}")
+        elif d == today:
+            cells.append(f"{YELLOW}▣{RESET}")
+        elif d < started_date:
+            cells.append(f"{DIM}·{RESET}")
+        else:
+            cells.append(f"{RED}□{RESET}")
+    legend = f"({GREEN}■{RESET}=Done  {YELLOW}▣{RESET}=Today  {RED}□{RESET}=Missed  {DIM}·{RESET}=Pre-start)"
+    return " ".join(cells) + f"  {DIM}{legend}{RESET}"
+
+
+def find_module_for_day(track_meta: dict, day_num: int) -> dict | None:
+    for m in track_meta.get("modules", []):
+        if m["start_day"] <= day_num <= m["end_day"]:
+            return m
+    return track_meta.get("modules", [None])[-1]
+
+
+def cmd_status(_args: argparse.Namespace) -> None:
+    state = load_state()
+    track_id, track_meta, progress = get_active_track_And_progress(state)
+    cur_day = progress["current_day"]
+    total_days = track_meta["total_days"]
+    completed_map = progress.get("completed_days", {})
+    completed_count = len(completed_map)
+
+    scores = [v.get("quiz_score", 0) for v in completed_map.values()]
+    avg_score = sum(scores) / len(scores) if scores else 0.0
+    acct_banner, effective_streak = evaluate_accountability(progress)
+
+    active_user = get_active_user()
+    if is_persisted_user(active_user):
+        user_badge = f"{GREEN}{BOLD}{active_user}{RESET} {GREEN}[🌐 Git-Persisted Across Devices]{RESET}"
+    else:
+        user_badge = (
+            f"{YELLOW}{BOLD}{active_user}{RESET} {DIM}[💻 Local-Only (gitignored) — "
+            f"run `grow user set {PERSISTED_USER}` for cross-device persistence]{RESET}"
+        )
+
+    print(f"\n{BOLD}{BG_CYAN} GROW — TERMINAL LEARNING & DAILY ACCOUNTABILITY ENGINE {RESET}")
+    print(f"{BOLD}Active User:{RESET}  {user_badge}")
+    print(f"{BOLD}Active Track:{RESET} {CYAN}{track_meta['title']}{RESET} ({DIM}id: {track_id}{RESET})")
+    print(f"{BOLD}Profile:{RESET}      {track_meta.get('learner_profile', 'Learner')} | {BOLD}Goal:{RESET} {track_meta['target_months']} Months ({total_days} Days)")
+    print(f"{BOLD}Overall:{RESET}      {progress_bar(completed_count, total_days, 30)}")
+    print(f"\n{acct_banner}")
+
+    print(
+        f"\n  🔥 {BOLD}Current Streak:{RESET} {effective_streak} day(s)"
+        f"   🏆 {BOLD}Best Streak:{RESET} {progress.get('longest_streak', 0)} day(s)"
+        f"   ⚡ {BOLD}Total XP:{RESET} {progress.get('xp', 0)}"
+        f"   🎯 {BOLD}Avg Test Score:{RESET} {avg_score:.0f}%"
+    )
+    print(f"  📅 {BOLD}Last 28 Days:{RESET}   {render_heatmap(progress, 28)}")
+
+    print(f"\n{BOLD}{BLUE}── 8-MONTH MODULE PROGRESS ───────────────────────────────────────────────{RESET}")
+    for m in track_meta.get("modules", []):
+        m_total = m["end_day"] - m["start_day"] + 1
+        m_done = sum(
+            1
+            for d in range(m["start_day"], m["end_day"] + 1)
+            if str(d) in completed_map
+        )
+        is_current = m["start_day"] <= cur_day <= m["end_day"]
+        pointer = f"{YELLOW}▶{RESET}" if is_current else " "
+        title_col = f"{BOLD}{YELLOW}{m['title'][:38]:<38}{RESET}" if is_current else f"{m['title'][:38]:<38}"
+        phase_badge = f"{DIM}[{m['phase'][:3]}]{RESET}"
+        print(f" {pointer} M{m['id']:02d} {phase_badge} {title_col} {progress_bar(m_done, m_total, 14)}")
+
+    day_data = load_day(track_id, cur_day)
+    print(f"\n{BOLD}{MAGENTA}── TODAY'S MISSION: DAY {cur_day} of {total_days} ───────────────────────────────────────────{RESET}")
+    if day_data:
+        print(f"  {BOLD}Topic:{RESET}   {day_data['title']}")
+        print(f"  {BOLD}Module:{RESET}  {day_data['module_title']} (~{day_data.get('estimated_minutes', 60)} mins)")
+        print(f"  {BOLD}Book:{RESET}    {day_data['resources']['book']['assignment']}")
+        print(f"  {BOLD}Lab:{RESET}     {day_data['lab']['title']}")
+    else:
+        mod = find_module_for_day(track_meta, cur_day)
+        mod_title = mod["title"] if mod else "Upcoming Module"
+        print(f"  {BOLD}Module:{RESET}  {mod_title}")
+        print(f"  {YELLOW}Note:{RESET}    Day {cur_day} lesson file (`tracks/{track_id}/days/day-{cur_day:03d}.json`) is ready to be generated by your OpenCode Mentor!")
+
+    print(f"\n{BOLD}Quick Commands:{RESET}")
+    print(f"  {CYAN}grow lesson{RESET}   Read Day {cur_day}'s concept explanation, book chapter & video")
+    print(f"  {CYAN}grow lab{RESET}      Initialize Day {cur_day}'s hands-on terminal sandbox in `workspace/`")
+    print(f"  {CYAN}grow verify{RESET}   Check if your hands-on terminal lab solution passes")
+    print(f"  {CYAN}grow test{RESET}     Take Day {cur_day}'s Lab Verification + Terminal Quiz to log today's streak!")
+    print(f"  {CYAN}grow help{RESET}     See all available commands & multi-track options\n")
+
+
+def cmd_roadmap(_args: argparse.Namespace) -> None:
+    state = load_state()
+    track_id, track_meta, progress = get_active_track_And_progress(state)
+    completed_map = progress.get("completed_days", {})
+
+    print(f"\n{BOLD}{BG_CYAN} {track_meta['title'].upper()} — FULL SYLLABUS {RESET}")
+    print(f"{DIM}Source: {track_meta.get('source_document')} | Target: {track_meta['target_months']} Months ({track_meta['target_weeks']} Weeks / {track_meta['total_days']} Days){RESET}\n")
+
+    for m in track_meta.get("modules", []):
+        m_total = m["end_day"] - m["start_day"] + 1
+        m_done = sum(1 for d in range(m["start_day"], m["end_day"] + 1) if str(d) in completed_map)
+        print(f"{BOLD}{CYAN}Module {m['id']:02d}: {m['title']}{RESET} [{m['phase']}] — Days {m['start_day']}–{m['end_day']} ({m['planned_weeks']} wks)  {progress_bar(m_done, m_total, 12)}")
+        book = m.get("primary_book", {})
+        if book:
+            print(f"  📚 {BOLD}Core Book:{RESET} {book.get('title')} — {DIM}{book.get('author')}{RESET}")
+            print(f"     {DIM}{book.get('note')}{RESET}")
+        for wk in m.get("weekly_breakdown", []):
+            print(f"  • {wk}")
+        print()
+
+
+def print_wrapped(text: str, indent: str = "  ", width: int = 88) -> None:
+    for line in text.split("\n"):
+        if not line.strip():
+            print()
+            continue
+        wrapped = textwrap.fill(
+            line,
+            width=width,
+            initial_indent=indent,
+            subsequent_indent=indent + "   " if line.lstrip().startswith(("-", "•", "1.", "2.", "3.", "4.", "5.")) else indent,
+        )
+        print(wrapped)
+
+
+def cmd_lesson(args: argparse.Namespace) -> None:
+    state = load_state()
+    track_id, track_meta, progress = get_active_track_And_progress(state)
+    day_num = args.day if args.day else progress["current_day"]
+    day_data = load_day(track_id, day_num)
+
+    if not day_data:
+        print(f"\n{YELLOW}Day {day_num} lesson (`tracks/{track_id}/days/day-{day_num:03d}.json`) has not been generated yet.{RESET}")
+        print(f"Open OpenCode in `{ROOT_DIR}` and say: {CYAN}\"Generate Day {day_num}\"{RESET} and your AI mentor will build it immediately!\n")
+        return
+
+    is_done = str(day_num) in progress.get("completed_days", {})
+    status_badge = f"{BG_GREEN} COMPLETED {RESET}" if is_done else f"{BG_YELLOW} IN PROGRESS {RESET}"
+
+    print(f"\n{BOLD}{BG_CYAN} DAY {day_num:03d} / {track_meta['total_days']} — {day_data['module_title'].upper()} {RESET} {status_badge}")
+    print(f"{BOLD}{YELLOW}Topic: {day_data['title']}{RESET} ({DIM}Est. ~{day_data.get('estimated_minutes', 60)} mins{RESET})\n")
+
+    print(f"{BOLD}{BLUE}1. WHY THIS MATTERS IN PRODUCTION{RESET}")
+    print_wrapped(day_data["why_it_matters"])
+
+    print(f"\n{BOLD}{BLUE}2. CONCEPT DEEP-DIVE{RESET}")
+    for para in day_data.get("concept_explanation", []):
+        print_wrapped(para)
+        print()
+
+    if day_data.get("cheat_sheet"):
+        print(f"{BOLD}{BLUE}3. TERMINAL CHEAT SHEET{RESET}")
+        for cmd in day_data["cheat_sheet"]:
+            print(f"  {GREEN}${RESET} {CYAN}{cmd}{RESET}")
+        print()
+
+    res = day_data.get("resources", {})
+    book = res.get("book", {})
+    video = res.get("video", {})
+    print(f"{BOLD}{BLUE}4. REALISTIC DAILY STUDY RESOURCES (NO 500-PAGE OVERLOAD!){RESET}")
+    if book:
+        print(f"  📖 {BOLD}Book Chapter ({book.get('realistic_time', '20 mins')}):{RESET} {book.get('title')}")
+        print(f"     {YELLOW}Assignment:{RESET} {book.get('assignment')}")
+        if book.get("url"):
+            print(f"     {DIM}Link: {book.get('url')}{RESET}")
+    if video:
+        vid_url = video.get("url", "")
+        ok, _info = verify_youtube_url(vid_url)
+        v_badge = f"{GREEN}[✔ Verified Live Video]{RESET}" if ok else f"{YELLOW}[Unverified Link]{RESET}"
+        print(f"  🎬 {BOLD}Video ({video.get('realistic_time', '15 mins')}):{RESET} {video.get('title')} ({video.get('creator')}) {v_badge}")
+        print(f"     {YELLOW}Assignment:{RESET} {video.get('assignment')}")
+        if vid_url:
+            print(f"     {CYAN}Watch URL:  {vid_url}{RESET}")
+
+    lab = day_data.get("lab", {})
+    if lab:
+        sandbox_rel = f"workspace/{track_id}/day-{day_num:03d}"
+        print(f"\n{BOLD}{BLUE}5. HANDS-ON TERMINAL LAB: {lab.get('title')}{RESET}")
+        print_wrapped(lab.get("description", ""))
+        print()
+        for t in lab.get("tasks", []):
+            print_wrapped(t)
+        print(f"\n  👉 Run {CYAN}grow lab {day_num}{RESET} to create `{sandbox_rel}`, then {CYAN}grow test {day_num}{RESET} when finished!\n")
+
+
+def setup_lab_sandbox(track_id: str, day_num: int, day_data: dict) -> Path:
+    sandbox = WORKSPACE_DIR / track_id / f"day-{day_num:03d}"
+    if sandbox.exists():
+        shutil.rmtree(sandbox)
+    sandbox.mkdir(parents=True, exist_ok=True)
+
+    lab = day_data.get("lab", {})
+    for item in lab.get("setup_files", []):
+        target = sandbox / item["path"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if "symlink_to" in item:
+            if target.exists() or target.is_symlink():
+                target.unlink()
+            os.symlink(item["symlink_to"], target)
+            continue
+
+        content = item.get("content", "")
+        repeat = item.get("repeat", 1)
+        with open(target, "w", encoding="utf-8") as f:
+            f.write(content * repeat)
+
+        if "mode" in item:
+            os.chmod(target, item["mode"])
+
+    return sandbox
+
+
+def cmd_lab(args: argparse.Namespace) -> None:
+    state = load_state()
+    track_id, _track_meta, progress = get_active_track_And_progress(state)
+    day_num = args.day if args.day else progress["current_day"]
+    day_data = load_day(track_id, day_num)
+    if not day_data:
+        print(f"{RED}Day {day_num} lesson file not found.{RESET}")
+        sys.exit(1)
+
+    sandbox = setup_lab_sandbox(track_id, day_num, day_data)
+    rel_sandbox = sandbox.relative_to(ROOT_DIR)
+    lab = day_data.get("lab", {})
+
+    print(f"\n{GREEN}✅ Sandbox initialized at:{RESET} {BOLD}{sandbox}{RESET}")
+    print(f"{BOLD}Enter sandbox:{RESET} {CYAN}cd {sandbox}{RESET}")
+    print(f"{BOLD}{YELLOW}Lab Mission: {lab.get('title')}{RESET}\n")
+    for t in lab.get("tasks", []):
+        print_wrapped(t)
+    print(f"\n{DIM}Tip: Work inside `{sandbox}`, then run `grow verify {day_num}` from anywhere to check your work.{RESET}\n")
+
+
+def run_verifications(track_id: str, day_num: int, day_data: dict) -> tuple[bool, list[tuple[bool, str, str]]]:
+    sandbox = WORKSPACE_DIR / track_id / f"day-{day_num:03d}"
+    verifications = day_data.get("lab", {}).get("verifications", [])
+    results: list[tuple[bool, str, str]] = []
+
+    if not sandbox.exists():
+        return False, [(False, "Sandbox directory exists", f"Missing `{sandbox.relative_to(ROOT_DIR)}` — run `grow lab {day_num}` first.")]
+
+    for v in verifications:
+        desc = v.get("description", "Verification check")
+        vtype = v.get("type")
+        try:
+            if vtype == "file_exact_lines":
+                p = sandbox / v["path"]
+                if not p.exists():
+                    results.append((False, desc, f"File `{v['path']}` does not exist."))
+                    continue
+                actual = [line.strip() for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
+                expected = [line.strip() for line in v["expected_lines"]]
+                if actual == expected:
+                    results.append((True, desc, "Matched exact expected lines."))
+                else:
+                    results.append((False, desc, f"Expected {len(expected)} specific lines in `{v['path']}`, got {len(actual)} lines."))
+
+            elif vtype == "file_line_count":
+                p = sandbox / v["path"]
+                if not p.exists():
+                    results.append((False, desc, f"File `{v['path']}` does not exist."))
+                    continue
+                lines = [line for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
+                if len(lines) == v["expected_count"]:
+                    results.append((True, desc, f"Found all {len(lines)} lines."))
+                else:
+                    results.append((False, desc, f"Expected {v['expected_count']} lines in `{v['path']}`, found {len(lines)}."))
+
+            elif vtype == "file_trimmed_equals":
+                p = sandbox / v["path"]
+                if not p.exists():
+                    results.append((False, desc, f"File `{v['path']}` does not exist."))
+                    continue
+                actual = p.read_text(encoding="utf-8").strip()
+                expected = str(v["expected"]).strip()
+                if actual == expected:
+                    results.append((True, desc, f"Value `{actual}` matches."))
+                else:
+                    results.append((False, desc, f"Expected `{expected}` in `{v['path']}`, got `{actual}`."))
+
+            elif vtype == "file_contains":
+                p = sandbox / v["path"]
+                if not p.exists():
+                    results.append((False, desc, f"File `{v['path']}` does not exist."))
+                    continue
+                actual = p.read_text(encoding="utf-8")
+                if v["expected_substring"] in actual:
+                    results.append((True, desc, f"Found `{v['expected_substring']}`."))
+                else:
+                    results.append((False, desc, f"Substring `{v['expected_substring']}` not found in `{v['path']}`."))
+
+            elif vtype == "file_contains_all":
+                p = sandbox / v["path"]
+                if not p.exists():
+                    results.append((False, desc, f"File `{v['path']}` does not exist."))
+                    continue
+                actual = p.read_text(encoding="utf-8")
+                missing = [s for s in v["substrings"] if s not in actual]
+                if not missing:
+                    results.append((True, desc, "All expected entries present."))
+                else:
+                    results.append((False, desc, f"Missing entries in `{v['path']}`: {', '.join(missing)}"))
+
+            elif vtype == "symlink_resolves_content":
+                p = sandbox / v["path"]
+                if not p.exists():
+                    results.append((False, desc, f"Path `{v['path']}` does not exist or symlink is broken."))
+                    continue
+                actual = p.read_text(encoding="utf-8").strip()
+                if actual == v["expected"]:
+                    results.append((True, desc, f"Resolved content `{actual}`."))
+                else:
+                    results.append((False, desc, f"Expected `{v['expected']}`, got `{actual}`."))
+
+            elif vtype == "same_inode":
+                p1 = sandbox / v["path1"]
+                p2 = sandbox / v["path2"]
+                if not p1.exists() or not p2.exists():
+                    results.append((False, desc, f"Both `{v['path1']}` and `{v['path2']}` must exist."))
+                    continue
+                if p2.is_symlink():
+                    results.append((False, desc, f"`{v['path2']}` is a symbolic link, not a hard link!"))
+                    continue
+                ino1 = os.stat(p1).st_ino
+                ino2 = os.stat(p2).st_ino
+                if ino1 == ino2:
+                    results.append((True, desc, f"Both share inode #{ino1}."))
+                else:
+                    results.append((False, desc, f"Inodes differ ({ino1} vs {ino2}) — use `ln` without `-s`."))
+
+            elif vtype == "matches_file_inode":
+                p = sandbox / v["path"]
+                target = sandbox / v["target_file"]
+                if not p.exists() or not target.exists():
+                    results.append((False, desc, f"Missing `{v['path']}` or `{v['target_file']}`."))
+                    continue
+                expected_ino = str(os.stat(target).st_ino)
+                actual = p.read_text(encoding="utf-8").strip()
+                if actual == expected_ino:
+                    results.append((True, desc, f"Inode {expected_ino} verified."))
+                else:
+                    results.append((False, desc, f"Expected inode `{expected_ino}`, found `{actual}`."))
+
+            elif vtype == "file_mode":
+                p = sandbox / v["path"]
+                if not p.exists():
+                    results.append((False, desc, f"Path `{v['path']}` does not exist."))
+                    continue
+                mode_oct = oct(stat.S_IMODE(os.lstat(p).st_mode))[2:]
+                expected_oct = str(v["expected_octal"]).lstrip("0") or "0"
+                if mode_oct == expected_oct:
+                    results.append((True, desc, f"Octal mode `{mode_oct}` verified."))
+                else:
+                    results.append((False, desc, f"Expected octal mode `{expected_oct}`, found `{mode_oct}` on `{v['path']}`."))
+
+            elif vtype == "no_empty_files_and_min_files":
+                d = sandbox / v["dir"]
+                if not d.exists():
+                    results.append((False, desc, f"Directory `{v['dir']}` missing."))
+                    continue
+                files = [f for f in d.rglob("*") if f.is_file()]
+                empty_files = [str(f.relative_to(sandbox)) for f in files if f.stat().st_size == 0]
+                if empty_files:
+                    results.append((False, desc, f"Found {len(empty_files)} empty file(s) still remaining: {', '.join(empty_files)}"))
+                elif len(files) < v.get("expected_file_count", 1):
+                    results.append((False, desc, f"Too many files deleted! Expected {v['expected_file_count']} non-empty files remaining, found {len(files)}."))
+                else:
+                    results.append((True, desc, f"0 empty files remaining; all {len(files)} valid files preserved."))
+
+            elif vtype == "valid_tar_gz":
+                p = sandbox / v["path"]
+                if not p.exists():
+                    results.append((False, desc, f"Archive `{v['path']}` does not exist."))
+                    continue
+                if not tarfile.is_tarfile(p):
+                    results.append((False, desc, f"`{v['path']}` is not a valid tar archive."))
+                    continue
+                with tarfile.open(p, "r:gz") as tf:
+                    names = tf.getnames()
+                if len(names) > 0:
+                    results.append((True, desc, f"Valid `.tar.gz` archive with {len(names)} entries."))
+                else:
+                    results.append((False, desc, "Archive is empty."))
+
+            elif vtype == "no_matching_files":
+                d = sandbox / v["dir"]
+                ext = v["extension"]
+                bad = [str(f.relative_to(sandbox)) for f in d.rglob(f"*{ext}")] if d.exists() else []
+                if not bad:
+                    results.append((True, desc, f"No `*{ext}` files remaining."))
+                else:
+                    results.append((False, desc, f"Found remaining `*{ext}` files: {', '.join(bad)}"))
+
+            else:
+                results.append((True, desc, "Custom check passed."))
+        except Exception as exc:
+            results.append((False, desc, f"Check error: {exc}"))
+
+    all_passed = all(r[0] for r in results) and len(results) > 0
+    return all_passed, results
+
+
+def cmd_verify(args: argparse.Namespace) -> None:
+    state = load_state()
+    track_id, _track_meta, progress = get_active_track_And_progress(state)
+    day_num = args.day if args.day else progress["current_day"]
+    day_data = load_day(track_id, day_num)
+    if not day_data:
+        print(f"{RED}Day {day_num} lesson file not found.{RESET}")
+        sys.exit(1)
+
+    passed, results = run_verifications(track_id, day_num, day_data)
+    print(f"\n{BOLD}{BG_CYAN} DAY {day_num:03d} — AUTOMATED PRACTICAL LAB VERIFICATION {RESET}\n")
+    for ok, desc, detail in results:
+        icon = f"{GREEN}[PASS]{RESET}" if ok else f"{RED}[FAIL]{RESET}"
+        print(f"  {icon} {BOLD}{desc}{RESET}")
+        print(f"         {DIM}{detail}{RESET}")
+
+    if passed:
+        print(f"\n{GREEN}🎉 All hands-on terminal lab checks PASSED! Run `grow test {day_num}` to complete the daily quiz.{RESET}\n")
+    else:
+        print(f"\n{YELLOW}⚠️  Some lab checks have not passed yet. Complete the tasks in `workspace/{track_id}/day-{day_num:03d}` and re-run `grow verify {day_num}`.{RESET}\n")
+        sys.exit(1)
+
+
+def record_completion(state: dict, track_id: str, day_num: int, quiz_score: int, note: str) -> None:
+    progress = state["tracks"][track_id]
+    today = datetime.date.today()
+    today_iso = today.isoformat()
+    last_str = progress.get("last_checkin_date")
+
+    if not last_str:
+        progress["current_streak"] = 1
+    else:
+        last_date = datetime.date.fromisoformat(last_str)
+        delta = (today - last_date).days
+        if delta == 0:
+            progress["current_streak"] = max(progress.get("current_streak", 1), 1)
+        elif delta == 1:
+            progress["current_streak"] = progress.get("current_streak", 0) + 1
+        else:
+            progress["current_streak"] = 1
+
+    progress["longest_streak"] = max(progress.get("longest_streak", 0), progress["current_streak"])
+    progress["last_checkin_date"] = today_iso
+
+    already_completed = str(day_num) in progress["completed_days"]
+    xp_earned = 25 if already_completed else 100 + (20 if quiz_score == 100 else 0)
+    progress["xp"] = progress.get("xp", 0) + xp_earned
+
+    progress["completed_days"][str(day_num)] = {
+        "completed_at": today_iso,
+        "quiz_score": quiz_score,
+        "lab_verified": True,
+        "note": note,
+    }
+    progress["daily_logs"].append(
+        {
+            "date": today_iso,
+            "day": day_num,
+            "quiz_score": quiz_score,
+            "xp_earned": xp_earned,
+            "streak": progress["current_streak"],
+            "note": note,
+        }
+    )
+
+    if progress["current_day"] == day_num:
+        progress["current_day"] = day_num + 1
+
+    save_state(state)
+    if is_persisted_user() and load_config().get("auto_sync", True):
+        sync_persisted_state(pull_first=False, commit_msg=f"chore(progress): {PERSISTED_USER} completed {track_id} day {day_num:03d}")
+
+
+def cmd_test(args: argparse.Namespace) -> None:
+    state = load_state()
+    track_id, track_meta, progress = get_active_track_And_progress(state)
+    day_num = args.day if args.day else progress["current_day"]
+    day_data = load_day(track_id, day_num)
+    if not day_data:
+        print(f"{RED}Day {day_num} lesson file not found.{RESET}")
+        sys.exit(1)
+
+    print(f"\n{BOLD}{BG_CYAN} DAY {day_num:03d} — END-OF-DAY ACCOUNTABILITY ASSESSMENT {RESET}")
+    print(f"{BOLD}Topic:{RESET} {day_data['title']}\n")
+
+    print(f"{BOLD}{BLUE}Part 1/2: Automated Practical Lab Verification{RESET}")
+    lab_passed, results = run_verifications(track_id, day_num, day_data)
+    for ok, desc, detail in results:
+        icon = f"{GREEN}[PASS]{RESET}" if ok else f"{RED}[FAIL]{RESET}"
+        print(f"  {icon} {desc} ({DIM}{detail}{RESET})")
+
+    if not lab_passed and not args.skip_lab:
+        print(f"\n{RED}❌ Your hands-on lab in `workspace/{track_id}/day-{day_num:03d}` is not passing yet.{RESET}")
+        print(f"Complete the terminal lab first (`grow lab {day_num}` -> solve -> `grow verify {day_num}`), then re-run `grow test {day_num}`.\n")
+        sys.exit(1)
+
+    quiz = day_data.get("quiz", [])
+    print(f"\n{BOLD}{BLUE}Part 2/2: Interactive Terminal Concept & Scenario Quiz ({len(quiz)} Questions){RESET}")
+    print(f"{DIM}Passing threshold: {track_meta.get('passing_score_percent', 80)}%+{RESET}\n")
+
+    correct = 0
+    for idx, q in enumerate(quiz, start=1):
+        print(f"{BOLD}{YELLOW}Q{idx}/{len(quiz)}:{RESET} {BOLD}{q['question']}{RESET}")
+        for opt in q["options"]:
+            print(f"  {opt}")
+        while True:
+            try:
+                ans = input(f"\n  {CYAN}Your answer (A/B/C/D): {RESET}").strip().upper()
+            except (EOFError, KeyboardInterrupt):
+                print(f"\n{YELLOW}Quiz aborted.{RESET}")
+                sys.exit(1)
+            if ans in ("A", "B", "C", "D"):
+                break
+            print(f"  {RED}Please enter A, B, C, or D.{RESET}")
+
+        expected = q["answer"].strip().upper()
+        if ans == expected:
+            correct += 1
+            print(f"  {GREEN}✔ Correct!{RESET} {DIM}{q['explanation']}{RESET}\n")
+        else:
+            print(f"  {RED}✘ Incorrect (Correct: {expected}).{RESET} {DIM}{q['explanation']}{RESET}\n")
+
+    score_pct = int(round((correct / max(len(quiz), 1)) * 100))
+    required_pct = track_meta.get("passing_score_percent", 80)
+
+    print(f"{BOLD}── ASSESSMENT RESULTS ────────────────────────────────────────────────────{RESET}")
+    print(f"  Practical Lab: {GREEN}PASSED{RESET}")
+    print(f"  Quiz Score:    {BOLD}{score_pct}%{RESET} ({correct}/{len(quiz)} correct, required: {required_pct}%)")
+
+    if score_pct < required_pct:
+        print(f"\n{RED}❌ Almost there! You scored {score_pct}%, which is below the {required_pct}% mastery bar.{RESET}")
+        print(f"Review the explanations above or `grow lesson {day_num}` and run `grow test {day_num}` again!\n")
+        sys.exit(1)
+
+    try:
+        note = input(f"\n{CYAN}📝 Write a 1-line takeaway from today's lesson (or press Enter): {RESET}").strip()
+    except (EOFError, KeyboardInterrupt):
+        note = ""
+    if not note:
+        note = f"Completed Day {day_num}: {day_data['title']}"
+
+    record_completion(state, track_id, day_num, score_pct, note)
+    updated_progress = state["tracks"][track_id]
+    print(f"\n{BG_GREEN} 🏆 DAY {day_num:03d} COMPLETE & LOGGED! {RESET}")
+    print(
+        f"  🔥 {BOLD}Streak:{RESET} {updated_progress['current_streak']} day(s)  |  "
+        f"⚡ {BOLD}Total XP:{RESET} {updated_progress['xp']}  |  "
+        f"🔓 {BOLD}Unlocked:{RESET} Day {updated_progress['current_day']}\n"
+    )
+
+
+def cmd_log(_args: argparse.Namespace) -> None:
+    state = load_state()
+    track_id, track_meta, progress = get_active_track_And_progress(state)
+    logs = progress.get("daily_logs", [])
+
+    print(f"\n{BOLD}{BG_CYAN} ACCOUNTABILITY LOG — {track_meta['title'].upper()} ({track_id}) {RESET}\n")
+    if not logs:
+        print(f"  {DIM}No check-ins recorded yet. Complete Day 1 with `grow test` to start your log!{RESET}\n")
+        return
+
+    for entry in logs:
+        print(
+            f"  {GREEN}✔{RESET} {BOLD}{entry['date']}{RESET} | "
+            f"Day {entry['day']:03d} | "
+            f"Score: {CYAN}{entry['quiz_score']}%{RESET} | "
+            f"+{entry['xp_earned']} XP | "
+            f"Streak: {entry['streak']}🔥\n"
+            f"    {DIM}“{entry.get('note', '')}”{RESET}"
+        )
+    print()
+
+
+def cmd_track(args: argparse.Namespace) -> None:
+    state = load_state()
+    sub = args.track_action
+
+    if sub == "list" or not sub:
+        active = state.get("active_track", "devops")
+        print(f"\n{BOLD}{BG_CYAN} AVAILABLE LEARNING TRACKS {RESET}\n")
+        for d in sorted(TRACKS_DIR.iterdir()):
+            if not d.is_dir() or d.name.startswith("_"):
+                continue
+            tf = d / "track.json"
+            if not tf.exists():
+                continue
+            meta = json.loads(tf.read_text(encoding="utf-8"))
+            prog = state.get("tracks", {}).get(d.name, {})
+            done = len(prog.get("completed_days", {}))
+            marker = f"{GREEN}● ACTIVE{RESET}" if d.name == active else f"{DIM}○ inactive{RESET}"
+            print(f"  {marker}  {BOLD}{d.name:<14}{RESET} — {meta['title']} ({done}/{meta['total_days']} days)")
+        print(f"\n{DIM}Use `grow track switch <id>` or `grow track create <id> \"<Title>\" --months 4`{RESET}\n")
+
+    elif sub == "switch":
+        target = args.id
+        if not target or not (TRACKS_DIR / target / "track.json").exists():
+            print(f"{RED}Track '{target}' does not exist.{RESET}")
+            sys.exit(1)
+        state["active_track"] = target
+        get_active_track_And_progress(state)
+        save_state(state)
+        print(f"{GREEN}✅ Switched active learning track to `{target}`.{RESET}")
+
+    elif sub == "create":
+        slug = args.id
+        title = args.title or f"{slug.title()} Learning Track"
+        months = args.months or 3
+        if not slug:
+            print(f"{RED}Provide a track ID slug, e.g. `grow track create rust \"Rust Systems Programming\"`{RESET}")
+            sys.exit(1)
+        target_dir = TRACKS_DIR / slug
+        if target_dir.exists():
+            print(f"{RED}Track `{slug}` already exists at {target_dir}{RESET}")
+            sys.exit(1)
+        (target_dir / "days").mkdir(parents=True, exist_ok=True)
+        template_file = TRACKS_DIR / "_template" / "track.json"
+        meta = json.loads(template_file.read_text(encoding="utf-8"))
+        meta["id"] = slug
+        meta["title"] = title
+        meta["target_months"] = months
+        meta["target_weeks"] = months * 4
+        meta["total_days"] = months * 28
+        (target_dir / "track.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        print(f"{GREEN}✅ Created new generic learning track `{slug}` ({title}) at `tracks/{slug}/`!{RESET}")
+        print(f"Switch to it anytime with `{CYAN}grow track switch {slug}{RESET}` and ask OpenCode to populate its curriculum.\n")
+
+
+def verify_youtube_url(url: str) -> tuple[bool, str]:
+    """Verifies a YouTube watch URL exists and is public via YouTube's official oEmbed API."""
+    if not url or "youtube.com/results" in url or "watch?v=" not in url and "youtu.be/" not in url:
+        return False, "Not a direct YouTube video link (must be watch?v=... or youtu.be/...)"
+    oembed_url = f"https://www.youtube.com/oembed?url={urllib.parse.quote(url, safe='')}&format=json"
+    req = urllib.request.Request(oembed_url, headers={"User-Agent": "Mozilla/5.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                return True, f"{data.get('title')} — {data.get('author_name')}"
+            return False, f"HTTP {resp.status}"
+    except Exception as exc:
+        return False, str(exc)
+
+
+def cmd_check_videos(_args: argparse.Namespace) -> None:
+    state = load_state()
+    track_id, track_meta, _progress = get_active_track_And_progress(state)
+    days_dir = TRACKS_DIR / track_id / "days"
+    day_files = sorted(days_dir.glob("day-*.json"))
+
+    print(f"\n{BOLD}{BG_CYAN} VERIFYING REAL YOUTUBE VIDEOS — {track_meta['title'].upper()} {RESET}\n")
+    all_ok = True
+    for df in day_files:
+        d = json.loads(df.read_text(encoding="utf-8"))
+        day_num = d.get("day")
+        vid = d.get("resources", {}).get("video", {})
+        url = vid.get("url", "")
+        ok, info = verify_youtube_url(url)
+        badge = f"{GREEN}[LIVE ✔]{RESET}" if ok else f"{RED}[INVALID ✘]{RESET}"
+        print(f"  Day {day_num:03d}: {badge} {BOLD}{ info if ok else vid.get('title', 'Unknown') }{RESET}")
+        print(f"           {DIM}{url}{RESET}")
+        if not ok:
+            print(f"           {RED}Reason: {info}{RESET}")
+            all_ok = False
+    print()
+    if not all_ok:
+        sys.exit(1)
+
+
+def run_git(cmd_args: list[str]) -> tuple[int, str, str]:
+    proc = subprocess.run(
+        ["git", *cmd_args],
+        cwd=ROOT_DIR,
+        capture_output=True,
+        text=True,
+    )
+    return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
+
+
+def sync_persisted_state(pull_first: bool = True, commit_msg: str | None = None) -> bool:
+    active_user = get_active_user()
+    if not is_persisted_user(active_user):
+        print(
+            f"\n{YELLOW}⚠️  Git cross-device persistence is exclusively enabled for user `{PERSISTED_USER}` "
+            f"(current user: `{active_user}`).{RESET}"
+        )
+        print(f"  • Your progress is saved locally in `{get_state_file().relative_to(ROOT_DIR)}` (gitignored).")
+        print(f"  • If you are {PERSISTED_USER.title()} on a new machine, run: {CYAN}grow user set {PERSISTED_USER}{RESET}\n")
+        return False
+
+    if not (ROOT_DIR / ".git").exists():
+        print(f"\n{YELLOW}⚠️  `{ROOT_DIR}` is not a Git repository yet. Run `git init` first.{RESET}\n")
+        return False
+
+    state_file = get_state_file(PERSISTED_USER)
+    rel_state = str(state_file.relative_to(ROOT_DIR))
+
+    rc_rem, remote_url, _ = run_git(["remote", "get-url", "origin"])
+    has_remote = rc_rem == 0 and bool(remote_url)
+
+    print(f"\n{BOLD}{BLUE}🔄 Syncing `{PERSISTED_USER}` progress ({rel_state})...{RESET}")
+
+    if pull_first and has_remote:
+        rc_pull, out_pull, err_pull = run_git(["pull", "--rebase", "--autostash"])
+        if rc_pull == 0:
+            print(f"  {GREEN}✔{RESET} Pulled latest remote changes from `origin`.")
+        else:
+            print(f"  {YELLOW}⚠️  Git pull note:{RESET} {err_pull or out_pull}")
+
+    run_git(["add", "-f", rel_state])
+    rc_diff, _, _ = run_git(["diff", "--cached", "--quiet", "--", rel_state])
+    if rc_diff != 0:
+        state = load_state()
+        track_id, _, progress = get_active_track_And_progress(state)
+        msg = commit_msg or (
+            f"chore(progress): sync {PERSISTED_USER} state "
+            f"({track_id} day {progress.get('current_day', 1)}, {progress.get('xp', 0)} XP, streak {progress.get('current_streak', 0)})"
+        )
+        rc_c, out_c, err_c = run_git(["commit", "-m", msg, "--", rel_state])
+        if rc_c == 0:
+            print(f"  {GREEN}✔{RESET} Committed `{rel_state}`: {DIM}{msg}{RESET}")
+        else:
+            print(f"  {RED}✘ Commit failed:{RESET} {err_c or out_c}")
+            return False
+    else:
+        print(f"  {GREEN}✔{RESET} `{rel_state}` is already clean and committed.")
+
+    if has_remote:
+        rc_push, out_push, err_push = run_git(["push"])
+        if rc_push != 0:
+            _, branch, _ = run_git(["branch", "--show-current"])
+            branch = branch or "main"
+            rc_push, out_push, err_push = run_git(["push", "-u", "origin", branch])
+        if rc_push == 0:
+            print(f"  {GREEN}🚀 Pushed `{PERSISTED_USER}` progress to `{remote_url}`!{RESET}\n")
+            return True
+        else:
+            print(f"  {YELLOW}⚠️  Committed locally, but push to `{remote_url}` failed:{RESET} {err_push or out_push}\n")
+            return False
+    else:
+        print(
+            f"  {YELLOW}ℹ️  Committed locally.{RESET} Add a Git remote (`git remote add origin <url>`) "
+            f"to push across devices.\n"
+        )
+        return True
+
+
+def cmd_user(args: argparse.Namespace) -> None:
+    action = getattr(args, "user_action", None) or "status"
+    cfg = load_config()
+
+    if action == "set":
+        raw_name = getattr(args, "username", None)
+        if not raw_name:
+            print(f"{RED}Usage: `grow user set <username>` (e.g., `grow user set {PERSISTED_USER}`){RESET}")
+            sys.exit(1)
+        username = sanitize_username(raw_name)
+        cfg["user"] = username
+        if getattr(args, "auto_sync", None) is not None:
+            cfg["auto_sync"] = bool(args.auto_sync)
+        elif username == PERSISTED_USER and "auto_sync" not in cfg:
+            cfg["auto_sync"] = True
+        elif username != PERSISTED_USER:
+            cfg["auto_sync"] = False
+
+        save_config(cfg)
+        load_state()
+        state_rel = get_state_file(username).relative_to(ROOT_DIR)
+
+        print(f"\n{GREEN}✅ Active user configured as `{BOLD}{username}{RESET}{GREEN}` in `data/config.json`!{RESET}")
+        if is_persisted_user(username):
+            print(f"  🌐 {BOLD}Persistence Mode:{RESET} {GREEN}Git-Persisted Across Devices{RESET}")
+            print(f"  📄 {BOLD}Tracked File:{RESET}     `{state_rel}` (whitelisted in `.gitignore`)")
+            print(f"  🔄 {BOLD}Auto-Sync:{RESET}        `{cfg.get('auto_sync', True)}` (syncs automatically on `grow test` or via `grow sync`)\n")
+        else:
+            print(f"  💻 {BOLD}Persistence Mode:{RESET} {YELLOW}Local-Only (gitignored){RESET}")
+            print(f"  📄 {BOLD}Local State File:{RESET} `{state_rel}` (ignored by Git; only `{PERSISTED_USER}` is persisted in repo)\n")
+        return
+
+    active_user = get_active_user()
+    state_rel = get_state_file(active_user).relative_to(ROOT_DIR)
+    env_override = os.environ.get("GROW_USER")
+
+    print(f"\n{BOLD}{BG_CYAN} GROW — USER PROFILE & PERSISTENCE CONFIGURATION {RESET}\n")
+    print(f"  👤 {BOLD}Active User:{RESET}      {CYAN}{BOLD}{active_user}{RESET}" + (f" ({YELLOW}via GROW_USER env{RESET})" if env_override else ""))
+    print(f"  ⚙️  {BOLD}Device Config:{RESET}    `data/config.json` (gitignored per device)")
+    print(f"  📄 {BOLD}State File:{RESET}       `{state_rel}`")
+    if is_persisted_user(active_user):
+        print(f"  🌐 {BOLD}Git Persistence:{RESET}  {GREEN}ENABLED (Whitelisted for `{PERSISTED_USER}` across devices){RESET}")
+        print(f"  🔄 {BOLD}Auto-Sync:{RESET}        {GREEN if cfg.get('auto_sync', True) else YELLOW}{cfg.get('auto_sync', True)}{RESET}")
+    else:
+        print(f"  💻 {BOLD}Git Persistence:{RESET}  {YELLOW}DISABLED (Local-only; Git persistence is reserved for `{PERSISTED_USER}`){RESET}")
+    print(f"\n{DIM}Commands: `grow user set {PERSISTED_USER}` | `grow user set <other>` | `grow sync`{RESET}\n")
+
+
+def cmd_sync(_args: argparse.Namespace) -> None:
+    ok = sync_persisted_state(pull_first=True)
+    if not ok:
+        sys.exit(1)
+
+
+def cmd_help(args: argparse.Namespace) -> None:
+    topic = getattr(args, "topic", None)
+    if topic:
+        parser = build_parser()
+        # Trigger subcommand help if valid
+        try:
+            parser.parse_args([topic, "--help"])
+        except SystemExit:
+            return
+
+    print(f"\n{BOLD}{BG_CYAN} GROW — COMMAND REFERENCE & DAILY WORKFLOW {RESET}")
+    print(f"{DIM}Global CLI installed at ~/.local/bin/grow (works from any directory){RESET}\n")
+
+    print(f"{BOLD}{BLUE}DAILY LEARNING WORKFLOW{RESET}")
+    print(f"  {CYAN}grow{RESET} / {CYAN}grow status{RESET}       Show your Accountability Dashboard, streak 🔥, 28-day heatmap & progress")
+    print(f"  {CYAN}grow lesson [day]{RESET}        Read the day's concept deep-dive, cheat sheet, book chapter, video & lab")
+    print(f"  {CYAN}grow lab [day]{RESET}           Create/reset the hands-on terminal sandbox in `workspace/<track>/day-XXX`")
+    print(f"  {CYAN}grow verify [day]{RESET}        Run automated checks on your hands-on terminal lab solution")
+    print(f"  {CYAN}grow test [day]{RESET}          Run Lab Verification + Interactive Quiz (80%+ to pass & log daily streak)")
+
+    print(f"\n{BOLD}{BLUE}CROSS-DEVICE PERSISTENCE (USER: {PERSISTED_USER.upper()}){RESET}")
+    print(f"  {CYAN}grow user{RESET}                Show active configured user and persistence mode (`{PERSISTED_USER}` vs local)")
+    print(f"  {CYAN}grow user set <name>{RESET}     Set device user in `data/config.json` (`{PERSISTED_USER}` persists in Git)")
+    print(f"  {CYAN}grow sync{RESET}                Pull & push `{PERSISTED_USER}` progress (`data/users/{PERSISTED_USER}.json`) via Git")
+
+    print(f"\n{BOLD}{BLUE}ROADMAP & HISTORY{RESET}")
+    print(f"  {CYAN}grow roadmap{RESET}             View the full multi-month syllabus, weekly breakdown & core books")
+    print(f"  {CYAN}grow log{RESET}                 View your full history of daily check-ins, test scores, XP & notes")
+    print(f"  {CYAN}grow check-videos{RESET}        Verify all daily video URLs are real, live YouTube videos")
+
+    print(f"\n{BOLD}{BLUE}MULTI-TRACK MANAGEMENT (LEARN ANYTHING){RESET}")
+    print(f"  {CYAN}grow track list{RESET}          List all learning tracks and see which one is active")
+    print(f"  {CYAN}grow track switch <id>{RESET}   Switch active track (e.g., `grow track switch devops`)")
+    print(f"  {CYAN}grow track create <id> \"<Title>\" [--months N]{RESET}")
+    print(f"                           Create a brand-new learning track for a future topic")
+
+    print(f"\n{BOLD}{BLUE}HELP & OPTIONS{RESET}")
+    print(f"  {CYAN}grow help [command]{RESET}      Show this command guide (or detailed flags for a specific command)")
+    print(f"  {CYAN}grow -h{RESET} / {CYAN}grow --help{RESET}    Standard CLI help flags\n")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="grow",
+        description="Terminal Learning, Hands-On Lab Grader & Daily Accountability Engine",
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    sub.add_parser("status", help="Show accountability dashboard, streak, heatmap & module progress")
+    sub.add_parser("roadmap", help="Display the full multi-month syllabus & recommended books")
+
+    p_lesson = sub.add_parser("lesson", help="Read today's concept, cheat sheet, book chapter, video & lab")
+    p_lesson.add_argument("day", nargs="?", type=int, help="Specific day number (defaults to current day)")
+
+    p_lab = sub.add_parser("lab", help="Initialize the hands-on terminal lab sandbox for the day")
+    p_lab.add_argument("day", nargs="?", type=int, help="Specific day number (defaults to current day)")
+
+    p_verify = sub.add_parser("verify", help="Run automated verification checks on your hands-on lab")
+    p_verify.add_argument("day", nargs="?", type=int, help="Specific day number (defaults to current day)")
+
+    p_test = sub.add_parser("test", help="Run lab verification + interactive terminal quiz to complete the day")
+    p_test.add_argument("day", nargs="?", type=int, help="Specific day number (defaults to current day)")
+    p_test.add_argument("--skip-lab", action="store_true", help="Run quiz only (not recommended)")
+
+    sub.add_parser("log", help="View your daily check-in history, scores, streaks & reflections")
+    sub.add_parser("check-videos", help="Verify all daily video links are real, live YouTube URLs")
+
+    p_user = sub.add_parser("user", help=f"Configure active user (`{PERSISTED_USER}` is Git-persisted; others are local-only)")
+    p_user.add_argument("user_action", nargs="?", choices=["status", "set"], default="status")
+    p_user.add_argument("username", nargs="?", help=f"Username to set (use `{PERSISTED_USER}` for cross-device Git sync)")
+    p_user.add_argument("--auto-sync", dest="auto_sync", action="store_true", default=None, help="Auto-commit & push on day completion")
+    p_user.add_argument("--no-auto-sync", dest="auto_sync", action="store_false", help="Disable auto-sync on day completion")
+
+    sub.add_parser("sync", help=f"Sync `{PERSISTED_USER}` progress across devices via Git pull/commit/push")
+
+    p_track = sub.add_parser("track", help="Manage multiple learning tracks (devops, rust, system-design, etc.)")
+    p_track.add_argument("track_action", nargs="?", choices=["list", "switch", "create"], default="list")
+    p_track.add_argument("id", nargs="?", help="Track slug ID")
+    p_track.add_argument("title", nargs="?", help="Track title (when creating)")
+    p_track.add_argument("--months", type=int, default=3, help="Target months for new track")
+
+    p_help = sub.add_parser("help", help="Show detailed command guide and options")
+    p_help.add_argument("topic", nargs="?", help="Optional command name to inspect (e.g., `grow help track`)")
+
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
+    args = parser.parse_args()
+    cmd = args.command or "status"
+
+    dispatch = {
+        "status": cmd_status,
+        "roadmap": cmd_roadmap,
+        "lesson": cmd_lesson,
+        "lab": cmd_lab,
+        "verify": cmd_verify,
+        "test": cmd_test,
+        "log": cmd_log,
+        "check-videos": cmd_check_videos,
+        "user": cmd_user,
+        "sync": cmd_sync,
+        "track": cmd_track,
+        "help": cmd_help,
+    }
+    dispatch[cmd](args)
+
+
+if __name__ == "__main__":
+    main()

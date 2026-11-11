@@ -1,0 +1,155 @@
+{
+  "day": 5,
+  "module_id": 1,
+  "module_title": "Linux Fundamentals & Bash Scripting",
+  "title": "Special Permissions (SUID, SGID, Sticky Bit), `sudoers` & Privilege Escalation Safety",
+  "estimated_minutes": 60,
+  "why_it_matters": "Why can anyone create files in `/tmp`, yet nobody can delete someone else's files there? How do shared engineering directories automatically keep group ownership consistent? And why is an accidental SUID binary on a server or container a P0 security vulnerability?",
+  "concept_explanation": [
+    "1. The 4th Octal Digit (Special Mode Bits): Above `rwx` (0–7), there is a leading 4th octal digit made of three special bits:\n   - **SUID (Set User ID = `4` / `u+s`)**: On an executable binary, the process runs with the effective UID of the **file owner** (e.g., `root`) instead of the user who ran it. Classic example: `/usr/bin/passwd` (`-rwsr-xr-x`) must modify `/etc/shadow` (owned by root).\n   - **SGID (Set Group ID = `2` / `g+s`)**: On a **directory**, every new file or subdirectory created inside it automatically inherits the directory's **group ownership** (instead of the creator's primary group). Essential for shared team directories (`/srv/deployments`).\n   - **Sticky Bit (`1` / `+t`)**: On a **directory** (like `/tmp`, mode `1777` / `drwxrwxrwt`), even though everyone has write permission to the directory, only the **file owner** (or `root`) is allowed to delete or rename a file inside it!",
+    "2. Reading `s` vs `S` and `t` vs `T`: Lowercase (`s`, `t`) means the underlying execute (`x`) bit IS also set. Uppercase (`S`, `T`) means the special bit is set WITHOUT the underlying `x` bit!",
+    "3. Principle of Least Privilege with `sudo`: Never share the `root` password or run CI agents as `root`. Use `/etc/sudoers.d/<file>` (Always validated with `visudo -cf <file>`) to grant a service account passwordless access to ONLY the exact commands it needs (e.g., `deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart myapp.service`)."
+  ],
+  "cheat_sheet": [
+    "chmod 2775 /srv/shared          # Set SGID (2) so all new files inherit directory group",
+    "chmod 1777 /var/app/ scratch    # Set Sticky Bit (1) so users can't delete others' files",
+    "find / -perm /4000 2>/dev/null  # Security audit: find all SUID binaries on the system",
+    "visudo -cf /etc/sudoers.d/app   # Validate syntax of a sudoers drop-in file before applying"
+  ],
+  "resources": {
+    "book": {
+      "title": "The Linux Command Line (5th Internet Edition) by William Shotts",
+      "url": "https://linuxcommand.org/tlcl.php",
+      "assignment": "Finish Chapter 9 ('Permissions' — Special Permissions SUID, SGID, Sticky Bit, `su` and `sudo` sections, ~8 pages).",
+      "realistic_time": "15 mins"
+    },
+    "video": {
+      "title": "STOP Guessing Linux Permissions: SUID, SGID & Sticky Bit Explained",
+      "creator": "Deep Developer",
+      "url": "https://www.youtube.com/watch?v=uF1V8dNr06w",
+      "assignment": "Watch the 7-minute focused breakdown of SUID (4), SGID (2), Sticky Bit (1), and privilege escalation risks.",
+      "realistic_time": "8 mins"
+    }
+  },
+  "lab": {
+    "title": "Configure Shared Team Directory (SGID), Safe Drop-Zone (Sticky Bit) & Audit Rogue SUID",
+    "description": "Inside `workspace/devops/day-005`, fix directory special permissions and identify a rogue SUID binary planted in a simulated directory:",
+    "tasks": [
+      "1. Run `./grow lab 5` to initialize `workspace/devops/day-005`.",
+      "2. Configure `team_releases` directory with **SGID** + `rwxrwxr-x` (`2775`).",
+      "3. Configure `shared_tmp` directory with the **Sticky Bit** + `rwxrwxrwx` (`1777`).",
+      "4. Inside `bin_audit/`, one of the files has the **SUID (`4000`)** bit set! Find which file has SUID enabled, strip its SUID bit so it is `0755`, and write ONLY its filename (e.g. `helper.sh`) into `workspace/devops/day-005/rogue_suid.txt`.",
+      "5. Run `./grow verify 5` or `./grow test 5`."
+    ],
+    "setup_files": [
+      {
+        "path": "team_releases/.keep",
+        "mode": 420,
+        "content": "releases\n"
+      },
+      {
+        "path": "shared_tmp/.keep",
+        "mode": 420,
+        "content": "tmp\n"
+      },
+      {
+        "path": "bin_audit/healthcheck",
+        "mode": 493,
+        "content": "#!/usr/bin/env bash\necho ok\n"
+      },
+      {
+        "path": "bin_audit/log_rotator",
+        "mode": 2541,
+        "content": "#!/usr/bin/env bash\necho rotate\n"
+      },
+      {
+        "path": "bin_audit/metrics_exporter",
+        "mode": 493,
+        "content": "#!/usr/bin/env bash\necho metrics\n"
+      }
+    ],
+    "verifications": [
+      {
+        "description": "team_releases has octal mode 2775 (SGID enabled)",
+        "type": "file_mode",
+        "path": "team_releases",
+        "expected_octal": "2775"
+      },
+      {
+        "description": "shared_tmp has octal mode 1777 (Sticky bit enabled)",
+        "type": "file_mode",
+        "path": "shared_tmp",
+        "expected_octal": "1777"
+      },
+      {
+        "description": "bin_audit/log_rotator had its rogue SUID bit stripped to 755",
+        "type": "file_mode",
+        "path": "bin_audit/log_rotator",
+        "expected_octal": "755"
+      },
+      {
+        "description": "rogue_suid.txt identifies 'log_rotator' as the rogue SUID binary",
+        "type": "file_trimmed_equals",
+        "path": "rogue_suid.txt",
+        "expected": "log_rotator"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "question": "What does the permission string `drwxrwxrwt` (`1777`) on `/tmp` guarantee?",
+      "options": [
+        "A) All files in `/tmp` are encrypted automatically",
+        "B) Any user can create files in `/tmp`, but the Sticky Bit (`t`) prevents users from deleting or renaming files owned by other users",
+        "C) Files created in `/tmp` run as root",
+        "D) Only root can list files in `/tmp`"
+      ],
+      "answer": "B",
+      "explanation": "The Sticky Bit (`1000` / `+t`) on a world-writable directory restricts file deletion and renaming to the file's owner, the directory's owner, or `root`."
+    },
+    {
+      "question": "Multiple engineers in the `devops` group deploy files into `/opt/app`. However, every time Alice creates a file there, it is owned by `alice:alice` instead of `alice:devops`, breaking Bob's access. Which command on `/opt/app` fixes this permanently for all newly created files?",
+      "options": [
+        "A) chmod 4775 /opt/app",
+        "B) chmod 2775 /opt/app (or chmod g+s /opt/app)",
+        "C) chmod 1775 /opt/app",
+        "D) umask 0777"
+      ],
+      "answer": "B",
+      "explanation": "Setting the SGID bit (`2000` / `g+s`) on a directory causes all newly created files and subdirectories inside it to inherit the directory's group (`devops`)."
+    },
+    {
+      "question": "Why should you ALWAYS edit `/etc/sudoers` or files in `/etc/sudoers.d/` using `visudo` instead of directly opening them with `nano` or `vim`?",
+      "options": [
+        "A) `nano` cannot open files in `/etc`",
+        "B) `visudo` locks the file against concurrent edits and validates the grammar before saving—a syntax error in `/etc/sudoers` will lock everyone out of `sudo`!",
+        "C) `visudo` automatically restarts the kernel",
+        "D) `/etc/sudoers` is a binary file"
+      ],
+      "answer": "B",
+      "explanation": "If you save a syntax error directly into `/etc/sudoers`, `sudo` immediately refuses to run for all users on the host. `visudo` parses and checks syntax before committing changes."
+    },
+    {
+      "question": "In a container image security scan, why is `allowPrivilegeEscalation: false` paired with removing SUID binaries (`chmod u-s`)?",
+      "options": [
+        "A) To reduce image size by 50%",
+        "B) Because a SUID-root binary inside a container allows a compromised non-root app user to execute code as UID 0 (root)",
+        "C) SUID binaries prevent Docker from starting",
+        "D) SUID only works on Windows"
+      ],
+      "answer": "B",
+      "explanation": "Attackers actively scan compromised containers with `find / -perm -4000` to find SUID-root binaries they can exploit to escalate from an unprivileged app user to `root`."
+    },
+    {
+      "question": "What do the octal digits `4`, `2`, and `1` represent in the 4th (leading) position of a 4-digit octal mode like `4755`, `2775`, `1777`?",
+      "options": [
+        "A) 4 = Read, 2 = Write, 1 = Execute",
+        "B) 4 = SUID, 2 = SGID, 1 = Sticky Bit",
+        "C) 4 = Sticky Bit, 2 = SUID, 1 = SGID",
+        "D) 4 = Owner, 2 = Group, 1 = Others"
+      ],
+      "answer": "B",
+      "explanation": "Just like r=4, w=2, x=1, the special permission bits follow the same binary weights: SUID = 4, SGID = 2, Sticky Bit = 1."
+    }
+  ]
+}
