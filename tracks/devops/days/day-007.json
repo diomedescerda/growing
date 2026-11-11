@@ -2,25 +2,27 @@
   "day": 7,
   "module_id": 1,
   "module_title": "Linux Fundamentals & Bash Scripting",
-  "title": "Week 1 Synthesis & Production Server Incident Audit",
+  "title": "Archiving & Compression (`tar`, `gzip`) + Week 1 Synthesis Challenge",
   "estimated_minutes": 60,
-  "why_it_matters": "Real production incidents never test just one command in isolation. Today you'll combine streams, FHS knowledge, symlinks, inodes, special permissions, and `find` to remediate a broken microservice deployment directory.",
+  "why_it_matters": "Every release artifact, container image layer, and config backup in Linux is a `.tar.gz` archive. Today you'll master `tar` and `gzip` (Chapter 18 + today's video) and combine everything you learned in Days 1–6 (streams, FHS, symlinks, permissions, and `find`) to remediate and package a production release directory.",
   "concept_explanation": [
-    "1. Week 1 Mental Model Review:\n   - **Streams & Exit Codes**: `0=stdin`, `1=stdout`, `2=stderr`, `$?` exit code, `> file 2>&1`, `set -euo pipefail`.\n   - **FHS & Virtual FS**: `/etc` (static config), `/var` (variable logs/state), `/proc` & `/sys` (live kernel state in RAM).\n   - **Inodes & Links**: Directories map `name -> inode`. Hard links share an inode on the same FS; symlinks (`ln -sfn`) hold a target path and enable atomic deployments.\n   - **Permissions & Special Bits**: Octal `4=r, 2=w, 1=x`; leading octal `4=SUID, 2=SGID, 1=Sticky Bit`. Directories require `x` to traverse and `w` to create/delete entries.\n   - **Bulk Discovery & Archiving**: `find` with `-type`, `-size`, `-mtime`, `-perm`, `-exec ... +`, `xargs -0`, and `tar -czf / -tzf / -xzf`.",
-    "2. Production Triage Workflow: Always inspect before mutating (`ls -la`, `stat`, `find`, `df -hT`, `df -i`), fix permissions to least privilege, repoint release symlinks atomically, and verify with automated health checks."
+    "1. Archiving vs. Compression (Chapter 18 & Video):\n   - `gzip file.txt` compresses a single file into `file.txt.gz` (`gunzip` decompresses it), but `gzip` alone does not bundle directory trees.\n   - `tar` ('Tape Archive') bundles an entire directory tree into a single `.tar` archive while preserving Linux permissions, symlinks, and directory structure.\n   - Combining `tar` with `-z` invokes `gzip` automatically to produce a `.tar.gz` (or `.tgz`) archive in one step!",
+    "2. Essential `tar` Flags You Will Use Every Day:\n   - `-c` (**c**reate a new archive)\n   - `-t` (**t**able of contents — list files inside an archive without extracting!)\n   - `-x` (**e**xtract files from an archive)\n   - `-z` (compress/decompress with **g**zip)\n   - `-v` (**v**erbose — print filenames as they are processed)\n   - `-f <archive_file>` (specify the archive **f**ilename — must always come immediately before the archive path!)\n   - Example: `tar -czf srv_app_backup.tar.gz srv_app/` creates a gzip-compressed archive of `srv_app/`.",
+    "3. Week 1 Synthesis (Days 1–6 Recap):\n   - **Day 1 (Streams)**: `cmd > stdout.txt 2> stderr.log` separates FD 1 and FD 2.\n   - **Day 2 (FHS)**: `/etc` (configs), `/var/log` (logs), `/proc` (virtual kernel info).\n   - **Day 3 (Links)**: `rm link && ln -s target link` (or `ln -sfn target link`) updates a release symlink.\n   - **Days 4 & 5 (Permissions)**: `chmod 0600` locks down private keys; `chmod 2775` enables SGID on shared team directories.\n   - **Day 6 (`find`)**: `find <dir> -type f -name '*.corrupt' -delete` removes unwanted files across nested subdirectories."
   ],
   "cheat_sheet": [
-    "ln -sfn releases/2026-11-09 current           # Atomic symlink switch",
-    "find . -type f -perm /4000                    # Find any file with SUID bit set",
-    "chmod 0600 secrets/*.key && chmod 0755 bin/*  # Lock down keys and make scripts executable",
-    "tar -czf audit_snapshot.tar.gz current/       # Archive current release"
+    "tar -czf srv_app_backup.tar.gz srv_app/          # Create (-c) gzip (-z) archive file (-f) of srv_app/",
+    "tar -tzf srv_app_backup.tar.gz                   # List (-t) contents of .tar.gz without extracting",
+    "tar -xzf srv_app_backup.tar.gz                   # Extract (-x) a .tar.gz archive",
+    "rm srv_app/current && ln -s releases/v3 srv_app/current  # Repoint release symlink (Day 3)",
+    "find srv_app/releases/v3 -type f -name '*.corrupt' -delete # Delete all .corrupt files (Day 6)"
   ],
   "resources": {
     "book": {
-      "title": "How Linux Works (3rd Edition) by Brian Ward / The Linux Command Line",
+      "title": "The Linux Command Line (5th Internet Edition) by William Shotts",
       "url": "https://linuxcommand.org/tlcl.php",
-      "assignment": "Review your Week 1 notes & skim Chapter 10 of The Linux Command Line (previewing Processes for Week 2, ~10 pages).",
-      "realistic_time": "15 mins"
+      "assignment": "Read Chapter 18 ('Archiving and Backup' — `gzip`, `gunzip`, and `tar` modes `c`, `t`, `x`, `z`, `f`, ~12 pages).",
+      "realistic_time": "18 mins"
     },
     "video": {
       "title": "How to Archive Folders in Linux (tar and gzip tutorial) - Linux Crash Course Series",
@@ -31,15 +33,16 @@
     }
   },
   "lab": {
-    "title": "Week 1 Boss Challenge: Remediate a Broken Production Node Layout",
-    "description": "Inside `workspace/devops/day-007`, a deployment to `srv_app/` failed halfway through. Fix all 4 issues below to bring the node back to compliance:",
+    "title": "Week 1 Boss Challenge: Remediate & Archive a Production Node Layout",
+    "description": "Inside `workspace/devops/day-007`, combine Days 1–7 to fix `srv_app/` and package a clean `.tar.gz` backup:",
     "tasks": [
       "1. Run `./grow lab 7` to generate `workspace/devops/day-007/srv_app`.",
-      "2. Repoint the broken symlink `srv_app/current` so it points to `releases/v3` (so `cat srv_app/current/release.txt` outputs `v3-production`).",
-      "3. Lock down `srv_app/secrets/tls.key` to octal mode `0600`, and configure `srv_app/shared_uploads` with SGID + `rwxrwxr-x` (`2775`).",
-      "4. Delete all `.corrupt` files anywhere inside `srv_app/releases/v3/`.",
-      "5. Run `srv_app/bin/healthcheck.sh`, capturing ONLY its `stdout` to `workspace/devops/day-007/health_ok.txt` and its `stderr` to `workspace/devops/day-007/health_err.log`.",
-      "6. Run `./grow verify 7` or `./grow test 7` to pass Week 1!"
+      "2. (Day 3 skill) Repoint the symlink `srv_app/current` from `releases/v2` to `releases/v3` (e.g., `rm srv_app/current && ln -s releases/v3 srv_app/current`) so `cat srv_app/current/release.txt` outputs `v3-production`.",
+      "3. (Days 4–5 skill) Lock down `srv_app/secrets/tls.key` to octal mode `0600` (`chmod 0600`), and configure `srv_app/shared_uploads` with SGID + `rwxrwxr-x` (`chmod 2775`).",
+      "4. (Day 6 skill) Use `find` to delete all `.corrupt` files anywhere inside `srv_app/releases/v3/` (`find srv_app/releases/v3 -type f -name '*.corrupt' -delete`).",
+      "5. (Day 1 skill) Run `./srv_app/bin/healthcheck.sh`, redirecting ONLY its `stdout` to `health_ok.txt` and its `stderr` to `health_err.log`.",
+      "6. (Day 7 skill) Create a gzip-compressed tar archive named `srv_app_backup.tar.gz` inside `workspace/devops/day-007/` containing the remediated `srv_app/` directory (`tar -czf srv_app_backup.tar.gz srv_app/`).",
+      "7. Run `./grow verify 7` or `./grow test 7` to pass Week 1!"
     ],
     "setup_files": [
       {
@@ -108,64 +111,69 @@
         "type": "file_trimmed_equals",
         "path": "health_ok.txt",
         "expected": "STATUS=HEALTHY RELEASE=v3"
+      },
+      {
+        "description": "srv_app_backup.tar.gz is a valid gzip-compressed tar archive of srv_app/",
+        "type": "valid_tar_gz",
+        "path": "srv_app_backup.tar.gz"
       }
     ]
   },
   "quiz": [
     {
-      "question": "You want to atomically switch `/var/www/current` from `/var/www/releases/v1` to `/var/www/releases/v2` without `ln` creating a `v2` symlink *inside* the `v1` directory. Which flags are required?",
+      "question": "Which `tar` command creates a new gzip-compressed archive named `configs.tar.gz` from the `/etc/nginx` directory?",
       "options": [
-        "A) ln -r",
-        "B) ln -sfn",
-        "C) ln -hard",
-        "D) ln -d"
+        "A) tar -xzf configs.tar.gz /etc/nginx",
+        "B) tar -czf configs.tar.gz /etc/nginx",
+        "C) tar -tzf configs.tar.gz /etc/nginx",
+        "D) gzip -c /etc/nginx > configs.tar.gz"
       ],
       "answer": "B",
-      "explanation": "`-s` (symbolic), `-f` (force overwrite), and `-n` (`--no-dereference`, treat an existing symlink-to-directory as a file to replace rather than descending into it)."
+      "explanation": "`-c` creates a new archive, `-z` compresses it with gzip, and `-f configs.tar.gz` specifies the output archive filename."
     },
     {
-      "question": "A daemon running as user `www-data` (UID 33, GID 33) needs to read `/etc/ssl/private/app.key` owned by `root:ssl-cert` with mode `0640`. Nothing else should have access. What is the cleanest Linux fix?",
+      "question": "Before extracting an unfamiliar archive `release-v3.tar.gz` onto a server, which `tar` command lets you list its contents without extracting any files?",
       "options": [
-        "A) chmod 0777 /etc/ssl/private/app.key",
-        "B) Add user `www-data` to the supplementary group `ssl-cert` (`usermod -aG ssl-cert www-data`) and ensure `/etc/ssl/private` allows group traversal (`0710` or `0750`)",
-        "C) Run the web server as `root`",
-        "D) Set SUID on `/etc/ssl/private/app.key`"
-      ],
-      "answer": "B",
-      "explanation": "Adding the service user to the `ssl-cert` group (`usermod -aG`) leverages group read permission (`0640`) without exposing the private key to other users on the machine."
-    },
-    {
-      "question": "Why must you NEVER run `usermod -G docker kenma` without the `-a` (append) flag?",
-      "options": [
-        "A) `-G` without `-a` overwrites and removes the user from all their existing supplementary groups (including `sudo`/`wheel`)!",
-        "B) `-G` deletes the user's home directory",
-        "C) `-G` only works on Alpine Linux",
-        "D) `-a` stands for admin"
+        "A) tar -tzf release-v3.tar.gz",
+        "B) tar -xzf release-v3.tar.gz",
+        "C) tar -czf release-v3.tar.gz",
+        "D) gunzip -l release-v3.tar.gz"
       ],
       "answer": "A",
-      "explanation": "A classic sysadmin rite of passage! `usermod -G group user` replaces the entire supplementary group list, removing `sudo` access. Always use `usermod -aG group user`."
+      "explanation": "As covered in Chapter 18 and today's video, `-t` (`--list`) displays the table of contents inside the archive without extracting it to disk."
     },
     {
-      "question": "Which directory holds live kernel tunable parameters (such as `net/ipv4/ip_forward`) that can be read as files or modified via `sysctl`?",
+      "question": "In a `tar` command such as `tar -czvf backup.tar.gz app/`, why must the `f` flag always be placed last in the flag group (`-czvf backup.tar.gz` rather than `-cfzv backup.tar.gz`)?",
       "options": [
-        "A) /var/kernel",
-        "B) /proc/sys",
-        "C) /usr/include/sys",
-        "D) /etc/kernel/live"
+        "A) Because flags must be in alphabetical order",
+        "B) Because `-f` expects the very next token after it to be the archive filename (`backup.tar.gz`)",
+        "C) Because `-v` only works at the end",
+        "D) Because `-z` disables `-f` if placed after it"
       ],
       "answer": "B",
-      "explanation": "`/proc/sys` exposes live kernel tunables; for example, `sysctl net.ipv4.ip_forward=1` writes `1` to `/proc/sys/net/ipv4/ip_forward`."
+      "explanation": "The `-f` option takes the archive filename as its immediate argument. If you wrote `-cfzv backup.tar.gz`, `tar` would think the archive filename is `zv`!"
     },
     {
-      "question": "If `cmd1 | cmd2 | cmd3` is run in a Bash script with `set -euo pipefail`, and `cmd2` exits with code 1 while `cmd1` and `cmd3` exit with 0, what is the exit status of the pipeline?",
+      "question": "Reviewing Day 5 (Special Permissions) and Day 4 (Permissions): What octal mode sets a shared directory so the owner and group have full `rwx`, others have `r-x`, and all newly created files inside automatically inherit the directory's group (SGID)?",
       "options": [
-        "A) 0",
-        "B) 1 (and the script exits immediately due to `set -e` + `pipefail`)",
-        "C) 255",
-        "D) Ignored unless `cmd3` fails"
+        "A) 0775",
+        "B) 1775",
+        "C) 2775",
+        "D) 4775"
       ],
-      "answer": "B",
-      "explanation": "With `pipefail` enabled, the pipeline returns the rightmost non-zero exit code (`1` from `cmd2`), which triggers `set -e` (`errexit`) to abort the script immediately."
+      "answer": "C",
+      "explanation": "SGID is `2` in the leading 4th octal slot (`4`=SUID, `2`=SGID, `1`=Sticky Bit), combined with `775` (`rwxrwxr-x`) = `2775`."
+    },
+    {
+      "question": "Reviewing Day 1 (Streams) and Day 6 (`find`): Which command finds all `.log` files in `/var/log`, silences any `Permission denied` errors emitted to `stderr`, and saves the list of matching paths to `found_logs.txt`?",
+      "options": [
+        "A) find /var/log -name '*.log' > found_logs.txt 2>/dev/null",
+        "B) find /var/log -name '*.log' 2> found_logs.txt >/dev/null",
+        "C) find /var/log -type d '*.log' > /dev/null",
+        "D) locate '*.log' 2>&1 /dev/null"
+      ],
+      "answer": "A",
+      "explanation": "`> found_logs.txt` redirects FD 1 (`stdout`, the found file paths) into `found_logs.txt`, while `2>/dev/null` sends FD 2 (`stderr`, permission errors) to `/dev/null`."
     }
   ]
 }

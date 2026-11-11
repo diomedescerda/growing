@@ -8,15 +8,15 @@
   "concept_explanation": [
     "1. Users, Groups & UIDs/GIDs: The Linux kernel doesn't care about usernames like `ubuntu` or `nginx`; it checks numeric **UID** (User ID) and **GID** (Group ID) stored in `/etc/passwd` and `/etc/group`. `root` is always UID 0. System/service accounts typically have UIDs < 1000 and shell `/usr/sbin/nologin`.",
     "2. The 9 Permission Bits (User / Group / Others):\n   - Read (`r` = 4), Write (`w` = 2), Execute (`x` = 1).\n   - **Crucial Distinction — Files vs. Directories**:\n     - On a **file**: `r` = read content, `w` = modify content, `x` = run as program.\n     - On a **directory**: `r` = list filenames (`ls`), `w` = create/delete/rename files inside the directory (even if you don't own the file!), `x` = traverse/enter (`cd`) and access inode metadata of files inside.",
-    "3. Octal vs Symbolic `chmod`:\n   - `chmod 600 id_ed25519` (`rw-------`): Only owner can read/write (mandatory for SSH private keys).\n   - `chmod 644 config.yaml` (`rw-r--r--`): Standard config file.\n   - `chmod 755 deploy.sh` (`rwxr-xr-x`): Standard executable script or public directory.\n   - `chmod -R u+rwX,go+rX,go-w /var/www`: Capital `X` adds execute permission ONLY to directories (and files already executable), avoiding making every `.html` file executable!",
-    "4. Default Creation Mask (`umask`): New files default to base `0666` and directories to `0777`, minus the process `umask`. With standard `umask 0022`, new files get `0644` and directories get `0755`."
+    "3. Octal vs Symbolic `chmod`:\n   - Octal adds up the bits for User, Group, and Others (`4` = `r`, `2` = `w`, `1` = `x`, `0` = `-`):\n     - `chmod 600 id_rsa_deploy` (`-rw-------`): Owner read+write (4+2=6), Group none (0), Others none (0).\n     - `chmod 640 config.env` (`-rw-r-----`): Owner read+write (6), Group read-only (4), Others none (0).\n     - `chmod 755 start_server.sh` (`-rwxr-xr-x`): Owner rwx (4+2+1=7), Group r-x (4+1=5), Others r-x (5).\n     - `chmod 700 secrets_vault` (`drwx------`): Owner rwx (7), Group none (0), Others none (0).\n   - Symbolic notation uses `u` (user/owner), `g` (group), `o` (others), `a` (all) with `+`, `-`, or `=` (e.g., `chmod u+x script.sh`, `chmod go-rwx key`).",
+    "4. Default Creation Mask (`umask`) & Ownership (`chown`, `chgrp`):\n   - New files default to base `0666` and directories to `0777`, minus the shell's `umask` (e.g., with `umask 0022`, new files get `0644` and directories get `0755`).\n   - `chown user:group file` changes both owner and group; `chgrp group file` changes group ownership."
   ],
   "cheat_sheet": [
-    "id                              # Print current user's UID, GID, and supplementary groups",
-    "chmod 600 ~/.ssh/id_ed25519     # Lock down SSH private key (rw-------)",
-    "chmod 750 /etc/app              # Owner rwx, Group r-x, Others none (rwxr-x---)",
-    "chown -R appuser:appgroup /srv  # Recursively change owner and group",
-    "stat -c '%a %U:%G %n' *         # Print octal permissions and owner:group for all files"
+    "id                              # Print current user's UID, GID, and group memberships",
+    "ls -l && ls -ld secrets_vault   # Inspect permissions of files (-l) and a directory itself (-ld)",
+    "chmod 600 id_rsa_deploy         # Owner rw- (6), Group --- (0), Others --- (0)",
+    "chmod 640 config.env            # Owner rw- (6), Group r-- (4), Others --- (0)",
+    "chown appuser:appgroup file.txt # Change owner to appuser and group to appgroup"
   ],
   "resources": {
     "book": {
@@ -128,26 +128,26 @@
       "explanation": "Base file mode `0666 & ~0027 = 0640` (`rw-r-----`), and base directory mode `0777 & ~0027 = 0750` (`rwxr-x---`)."
     },
     {
-      "question": "Why does `ssh -i mykey.pem ubuntu@server` fail if `mykey.pem` has permissions `0644`?",
+      "question": "Which `chmod` command sets a file's permissions to `-rw-r-----` (owner read/write, group read-only, others no permissions)?",
       "options": [
-        "A) Private keys must be executable (`0755`)",
-        "B) OpenSSH enforces strict security checks and refuses to use a private key if group or others have any read/write/execute access (must be `0600` or `0400`)",
-        "C) SSH keys must be owned by root",
-        "D) `.pem` files are not supported by OpenSSH"
+        "A) chmod 755 config.env",
+        "B) chmod 640 config.env",
+        "C) chmod 644 config.env",
+        "D) chmod 600 config.env"
       ],
       "answer": "B",
-      "explanation": "OpenSSH prints `WARNING: UNPROTECTED PRIVATE KEY FILE!` and rejects any key readable by group or others (`0644`). Locking it to `chmod 600` or `chmod 400` fixes it."
+      "explanation": "In octal notation: Owner `rw-` = 4+2 = 6; Group `r--` = 4; Others `---` = 0, giving `640`."
     },
     {
-      "question": "Inside a Docker container running as UID `1001`, the process tries to write to a host bind-mounted directory owned by UID `1000` with mode `0755`. Why does it fail with `Permission denied`?",
+      "question": "In `chown www-data:devops /var/www/index.html`, what does the syntax `www-data:devops` change?",
       "options": [
-        "A) Docker containers cannot write to host disks",
-        "B) The Linux kernel checks numeric UIDs across container namespaces; UID 1001 is neither owner (1000) nor has write access under `0755` (`r-x` for others)",
-        "C) `0755` disables writing for everyone including owner",
-        "D) Bind mounts are always read-only"
+        "A) It renames the file from `www-data` to `devops`",
+        "B) It sets the file's user owner to `www-data` and its group owner to `devops`",
+        "C) It sets the group owner to `www-data` and user owner to `devops`",
+        "D) It copies the file to user `www-data`'s home directory"
       ],
       "answer": "B",
-      "explanation": "Containers share the host kernel! UID 1001 inside the container is evaluated by the host kernel against the directory's owner UID 1000. Under `0755`, UID 1001 falls into 'others' (`r-x`), lacking `w`."
+      "explanation": "As covered in Chapter 9 and today's video, `chown owner:group <path>` changes the file's user owner (before the colon) and group owner (after the colon) in a single command."
     }
   ]
 }

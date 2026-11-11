@@ -4,20 +4,20 @@
   "module_title": "Linux Fundamentals & Bash Scripting",
   "title": "Inodes, Hard Links vs Symbolic Links & Zero-Downtime Atomic Deployments",
   "estimated_minutes": 60,
-  "why_it_matters": "Have you ever seen `No space left on device` on a server when `df -h` says 40% of the disk is still free? Or wondered how tools like Capistrano and Nginx switch releases with zero downtime? Both come down to understanding Inodes, Hard Links, and Symbolic Links (`ln -sfn`).",
+  "why_it_matters": "How does Linux actually store files on disk, why can deleting a file leave data intact if another hard link exists, and how do deployment tools switch live application releases (`v1` -> `v2`) using symbolic links? Everything comes down to understanding Inodes, Hard Links (`ln`), and Symbolic Links (`ln -s`).",
   "concept_explanation": [
-    "1. What Is an Inode? On a Linux filesystem (`ext4`, `xfs`), a file's *name* is NOT stored inside the file. Instead, a directory is just a lookup table mapping `filename -> inode number`. The **inode** stores all metadata: file size, owner UID/GID, permissions, timestamps, link count, and pointers to the actual data blocks on disk.",
-    "2. Inode Exhaustion (`df -i`): Every filesystem has a fixed or limited pool of inodes. If a poorly written app or cache creates millions of tiny 1-byte files, you will run out of inodes (`IUse% = 100%` in `df -i`) and Linux will throw `No space left on device` even with gigabytes of free block storage!",
-    "3. Hard Links (`ln target link_name`):\n   - Creates a second directory entry pointing to the **exact same inode number**.\n   - Deleting the original file (`rm target`) does NOT delete the data blocks as long as the inode's link count > 0 (and no process has the file open).\n   - Limitations: Cannot cross filesystem/partition boundaries, and cannot link directories.",
-    "4. Symbolic / Soft Links (`ln -s target link_name`):\n   - Creates a brand new file with its **own inode** whose content is simply the text path to the target.\n   - Can point to directories and across different disks/mounts.\n   - If the target is deleted, the symlink becomes 'dangling' (broken).",
-    "5. DevOps Pattern — Atomic Symlink Switching: To deploy `release-v2` without downtime while processes read `/var/www/current`, you deploy to `/var/www/releases/v2` and run `ln -sfn /var/www/releases/v2 /var/www/current`."
+    "1. What Is an Inode? On a Linux filesystem, a file's *name* is NOT stored inside the file. Instead, a directory is just a table mapping `filename -> inode number`. The **inode** stores all metadata: file size, owner, permissions, timestamps, link count, and pointers to the actual data blocks on disk. You can see any file's inode number in the first column of `ls -li <file>` (or `ls -i <file>`) and view its full inode table entry with `stat <file>`.",
+    "2. Basic File & Directory Manipulation (Chapter 4 Review):\n   - `mkdir -p dir/subdir`: Creates directories (including missing parent directories).\n   - `cp -r src dst` / `mv src dst` / `rm file`: Copies, moves/renames, or unlinks (removes) directory entries.",
+    "3. Hard Links (`ln target link_name`):\n   - Creates a second directory entry pointing to the **exact same inode number**.\n   - Run `ls -li` and you'll see both filenames have the identical inode number and the link count column increases from `1` to `2`.\n   - Deleting the original filename (`rm target`) only decrements the link count from `2` to `1`—the data blocks remain 100% intact and accessible via `link_name` until the link count reaches `0`!\n   - Two strict rules from Chapter 4: Hard links **cannot** reference a file on a different disk/filesystem, and **cannot** reference a directory.",
+    "4. Symbolic / Soft Links (`ln -s target link_name`):\n   - Creates a special file (`lrwxrwxrwx` in `ls -l`) with its **own separate inode** whose content is simply the text path pointing to `target`.\n   - Overcomes both hard-link limitations: symlinks **can** point to directories and **can** cross filesystems.\n   - If the target is deleted, the symlink remains behind as a **broken (dangling) link**.",
+    "5. Updating a Directory Symlink for Releases (`rm` + `ln -s` or `ln -sfn`):\n   - As taught in Chapter 4, to repoint an existing symlink `current` from `releases/v1.0.0` to `releases/v2.0.0`, remove the old symlink first (`rm current`) and create the new one (`ln -s releases/v2.0.0 current`).\n   - Pro shortcut: `ln -sfn releases/v2.0.0 current` (`-f` forces replacement, `-n` treats an existing directory symlink as a link to replace rather than creating a link *inside* the old directory)."
   ],
   "cheat_sheet": [
-    "ls -li                      # Show inode numbers (-i) alongside permissions and link counts",
-    "stat config.yaml            # Full inode metadata: size, blocks, inode #, links, mtime/ctime/atime",
-    "df -i                       # Check inode usage percentage across all mounted filesystems",
-    "ln source.txt hardlink.txt  # Create a hard link (same inode)",
-    "ln -sfn /app/v2 /app/current # Atomically repoint symlink 'current' to '/app/v2'"
+    "ls -li shared/database.sqlite                  # Show inode number (1st column) & link count",
+    "stat shared/database.sqlite                    # Inspect full inode table metadata (Inode, Links, Size)",
+    "ln shared/database.sqlite shared/db.bak        # Create a hard link (shares the exact same inode)",
+    "ln -s releases/v2.0.0 current                  # Create a symbolic link pointing to a directory",
+    "rm current && ln -s releases/v2.0.0 current    # Replace an existing symlink (Chapter 4 method)"
   ],
   "resources": {
     "book": {
@@ -39,9 +39,9 @@
     "description": "Practice working with inodes, hard links, and atomic symlink release switching inside `workspace/devops/day-003`:",
     "tasks": [
       "1. Run `./grow lab 3` to set up `workspace/devops/day-003` containing `releases/v1.0.0/version.txt`, `releases/v2.0.0/version.txt`, and `shared/database.sqlite`.",
-      "2. Right now, `current` is a symlink pointing to `releases/v1.0.0`. Update the `current` symlink so it points to `releases/v2.0.0` (so `cat current/version.txt` outputs `v2.0.0`).",
-      "3. Create a **hard link** named `shared/database.sqlite.bak` pointing to the exact same inode as `shared/database.sqlite`.",
-      "4. Find the inode number of `shared/database.sqlite` (using `stat -c %i` or `ls -i`) and write ONLY that integer number into `workspace/devops/day-003/db_inode.txt`.",
+      "2. Right now, `current` is a symbolic link pointing to `releases/v1.0.0`. Using the commands from Chapter 4, remove the old `current` symlink (`rm current`) and create a new symbolic link `ln -s releases/v2.0.0 current` so `cat current/version.txt` outputs `v2.0.0`.",
+      "3. Using `ln` (without `-s`), create a **hard link** named `shared/database.sqlite.bak` pointing to `shared/database.sqlite`.",
+      "4. Run `ls -li shared/database.sqlite` (or `stat shared/database.sqlite` as shown in today's video) to see its inode number (the number in the first column of `ls -li`), and write ONLY that integer number into `workspace/devops/day-003/db_inode.txt`.",
       "5. Run `./grow verify 3` or `./grow test 3`."
     ],
     "setup_files": [
@@ -85,18 +85,18 @@
   },
   "quiz": [
     {
-      "question": "A production server alerts with `No space left on device` when creating a file, but `df -h` shows 65 GB free on `/`. Which command should you run next to check if millions of tiny files exhausted the filesystem metadata table?",
+      "question": "Which `ls` option (covered in Chapter 4 and today's video) prints the inode number in the first column so you can verify whether two filenames share the same inode?",
       "options": [
-        "A) free -h",
-        "B) df -i",
-        "C) du -sh /",
-        "D) lsblk"
+        "A) ls -a",
+        "B) ls -li (the -i flag)",
+        "C) ls -h",
+        "D) ls -r"
       ],
       "answer": "B",
-      "explanation": "`df -i` displays inode usage. If `IUse%` is 100%, no new files can be created regardless of how many gigabytes of block space remain."
+      "explanation": "The `-i` option (`ls -i` or `ls -li`) prints the file's inode number in the first column. Two hard links to the same file will display the exact same inode number."
     },
     {
-      "question": "Which piece of information is NOT stored inside a file's inode?",
+      "question": "Which piece of information is stored in the directory entry rather than inside the file's inode?",
       "options": [
         "A) Owner UID and GID",
         "B) File permissions (mode)",
@@ -107,7 +107,7 @@
       "explanation": "Filenames are stored in directory entries (which map filename -> inode number), NOT in the inode itself. That's why a single inode can have multiple filenames (hard links) pointing to it."
     },
     {
-      "question": "You create a hard link `ln app.log app_backup.log` and then delete `rm app.log`. What happens to `app_backup.log` and the underlying data?",
+      "question": "You create a hard link `ln app.log app_backup.log` and then delete the original name with `rm app.log`. What happens to `app_backup.log` and the underlying data?",
       "options": [
         "A) `app_backup.log` becomes a broken link and the data is lost",
         "B) The inode's link count decrements from 2 to 1, and `app_backup.log` retains full access to the intact data",
@@ -115,29 +115,29 @@
         "D) `app_backup.log` is truncated to 0 bytes"
       ],
       "answer": "B",
-      "explanation": "Data blocks are only freed when an inode's link count drops to 0 AND no running process has an open file descriptor to that inode."
+      "explanation": "With hard links, both names point directly to the same inode. Removing one name only decrements the inode's link count from 2 to 1; the disk blocks are only freed when the link count drops to 0."
     },
     {
-      "question": "Why can't you create a hard link from `/home/user/file.txt` to `/mnt/external_disk/file.txt`?",
+      "question": "According to Chapter 4 of The Linux Command Line, what are the two limitations of hard links that symbolic links (`ln -s`) overcome?",
       "options": [
-        "A) Hard links require root privileges",
-        "B) Inode numbers are only unique within a single mounted filesystem; hard links cannot cross filesystem boundaries",
-        "C) `/mnt` is read-only by default",
-        "D) Hard links only work on `.sh` files"
+        "A) Hard links require root privileges and only work on text files",
+        "B) Hard links cannot reference files outside their own filesystem (disk partition) and cannot reference directories",
+        "C) Hard links cannot be deleted with `rm` and cannot be renamed with `mv`",
+        "D) Hard links only work inside `/tmp` and `/var`"
       ],
       "answer": "B",
-      "explanation": "Each mounted filesystem maintains its own independent inode table (so inode #500 on `/` is completely unrelated to inode #500 on `/mnt/external_disk`). Only symbolic links (`ln -s`) can cross filesystems."
+      "explanation": "Because hard links point directly to an inode number (which is only unique within a single filesystem), a hard link cannot cross filesystem boundaries and cannot link directories. Symbolic links (`ln -s`) store a text path and can do both."
     },
     {
-      "question": "A running Java service has a 20 GB log file `/var/log/app.log` open. A developer runs `rm /var/log/app.log` to free disk space, but `df -h` shows the 20 GB was NOT freed! Why?",
+      "question": "You create a symbolic link `ln -s config_v1.yaml active.yaml` and then delete `rm config_v1.yaml`. What happens when you try to read `cat active.yaml`?",
       "options": [
-        "A) `rm` moves files to `/root/.Trash` first",
-        "B) Although the directory link count reached 0, the running Java process still holds an open file descriptor to that inode until the process restarts or the file is truncated (`truncate -s 0`)",
-        "C) ext4 only frees space after a reboot",
-        "D) You must run `sync` three times"
+        "A) `active.yaml` still contains a full copy of `config_v1.yaml`",
+        "B) `active.yaml` becomes a broken (dangling) symlink and `cat active.yaml` fails with `No such file or directory`",
+        "C) `rm config_v1.yaml` automatically deletes `active.yaml` too",
+        "D) Linux converts `active.yaml` into a hard link automatically"
       ],
       "answer": "B",
-      "explanation": "This is one of the most common DevOps interview and production questions! The kernel only reclaims blocks when BOTH the link count is 0 AND open file descriptor count is 0. You can see deleted-but-open files with `lsof +L1`."
+      "explanation": "Unlike a hard link, a symbolic link only holds the pathname of its target. If the target file is deleted or moved, the symlink points to a non-existent path (a broken/dangling link)."
     }
   ]
 }

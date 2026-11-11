@@ -27,6 +27,10 @@ Before answering, ALWAYS check the learner's current state:
        - **CRITICAL RULE**: NEVER use a YouTube search query URL (`youtube.com/results?search_query=...`) or guess a video ID. Always find a real YouTube video (`https://www.youtube.com/watch?v=...`) and run `grow check-videos` (which checks YouTube's official oEmbed API) to confirm the exact title, creator, and URL are live and valid.
     4. **1 Hands-On Terminal Lab** (`./grow lab`) with automated verification rules (`./grow verify`) inside `workspace/<track>/day-XXX/`.
     5. **1 Daily Assessment** (`./grow test`) combining the automated practical lab grader + a 5-question terminal scenario quiz (80%+ required to pass and log the streak).
+  - **STRICT CONTENT ALIGNMENT RULE (Book + Video <-> Concept + Cheat Sheet <-> Lab + Quiz)**:
+    - **NEVER** require commands, flags, or concepts in a day's **Lab** or **Quiz** that have not been taught in **that day's assigned Book chapter + Video** (or a previous completed day).
+    - Every command and flag needed to solve the Lab MUST also be explicitly explained in that day's `concept_explanation` and shown with an example in `cheat_sheet`.
+    - Do not leak future topics (e.g., `find` before the `find` lesson, `tar` before the `tar` lesson, or Docker/Kubernetes before their modules) into earlier labs or quizzes.
 
 ## 3. CLI Commands (`grow`)
 `grow` is symlinked into `~/.local/bin/grow` and available globally in `$PATH`:

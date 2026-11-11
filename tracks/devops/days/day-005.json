@@ -7,14 +7,16 @@
   "why_it_matters": "Why can anyone create files in `/tmp`, yet nobody can delete someone else's files there? How do shared engineering directories automatically keep group ownership consistent? And why is an accidental SUID binary on a server or container a P0 security vulnerability?",
   "concept_explanation": [
     "1. The 4th Octal Digit (Special Mode Bits): Above `rwx` (0–7), there is a leading 4th octal digit made of three special bits:\n   - **SUID (Set User ID = `4` / `u+s`)**: On an executable binary, the process runs with the effective UID of the **file owner** (e.g., `root`) instead of the user who ran it. Classic example: `/usr/bin/passwd` (`-rwsr-xr-x`) must modify `/etc/shadow` (owned by root).\n   - **SGID (Set Group ID = `2` / `g+s`)**: On a **directory**, every new file or subdirectory created inside it automatically inherits the directory's **group ownership** (instead of the creator's primary group). Essential for shared team directories (`/srv/deployments`).\n   - **Sticky Bit (`1` / `+t`)**: On a **directory** (like `/tmp`, mode `1777` / `drwxrwxrwt`), even though everyone has write permission to the directory, only the **file owner** (or `root`) is allowed to delete or rename a file inside it!",
-    "2. Reading `s` vs `S` and `t` vs `T`: Lowercase (`s`, `t`) means the underlying execute (`x`) bit IS also set. Uppercase (`S`, `T`) means the special bit is set WITHOUT the underlying `x` bit!",
-    "3. Principle of Least Privilege with `sudo`: Never share the `root` password or run CI agents as `root`. Use `/etc/sudoers.d/<file>` (Always validated with `visudo -cf <file>`) to grant a service account passwordless access to ONLY the exact commands it needs (e.g., `deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart myapp.service`)."
+    "2. Reading `s` vs `S` and `t` vs `T` in `ls -l`: Lowercase (`s`, `t`) means the underlying execute (`x`) bit IS also set (e.g., `-rwsr-xr-x` for `4755`, `drwxrwsr-x` for `2775`, `drwxrwxrwt` for `1777`). Uppercase (`S`, `T`) means the special bit is set WITHOUT the underlying `x` bit!",
+    "3. Removing a Rogue SUID Bit: If `ls -l` reveals an unexpected `s` in the user execute position (`-rwsr-xr-x`), you can strip the SUID bit using symbolic notation (`chmod u-s <file>`) or explicit 4-digit octal notation (`chmod 0755 <file>`).",
+    "4. Privilege Escalation with `su` vs `sudo` (Chapter 9): `su -` switches to a new login shell as superuser (requiring root's password), whereas `sudo <cmd>` executes a single privileged command audited against `/etc/sudoers`."
   ],
   "cheat_sheet": [
-    "chmod 2775 /srv/shared          # Set SGID (2) so all new files inherit directory group",
-    "chmod 1777 /var/app/ scratch    # Set Sticky Bit (1) so users can't delete others' files",
-    "find / -perm /4000 2>/dev/null  # Security audit: find all SUID binaries on the system",
-    "visudo -cf /etc/sudoers.d/app   # Validate syntax of a sudoers drop-in file before applying"
+    "ls -ld team_releases shared_tmp # Inspect directory permissions including special bits (s, t)",
+    "ls -l bin_audit/                # Check binaries for SUID bit ('s' in owner execute slot: -rwsr-xr-x)",
+    "chmod 2775 team_releases        # Set SGID (2) + rwxrwxr-x (or: chmod g+s team_releases)",
+    "chmod 1777 shared_tmp           # Set Sticky Bit (1) + rwxrwxrwx (or: chmod +t shared_tmp)",
+    "chmod 0755 bin_audit/file       # Strip special bits and reset to 0755 (or: chmod u-s bin_audit/file)"
   ],
   "resources": {
     "book": {
@@ -38,7 +40,7 @@
       "1. Run `./grow lab 5` to initialize `workspace/devops/day-005`.",
       "2. Configure `team_releases` directory with **SGID** + `rwxrwxr-x` (`2775`).",
       "3. Configure `shared_tmp` directory with the **Sticky Bit** + `rwxrwxrwx` (`1777`).",
-      "4. Inside `bin_audit/`, one of the files has the **SUID (`4000`)** bit set! Find which file has SUID enabled, strip its SUID bit so it is `0755`, and write ONLY its filename (e.g. `helper.sh`) into `workspace/devops/day-005/rogue_suid.txt`.",
+      "4. Run `ls -l bin_audit/` to inspect the 3 scripts inside `bin_audit/`. Spot the one file that has the **SUID** bit set (`-rwsr-xr-x` instead of `-rwxr-xr-x`), strip its SUID bit using `chmod u-s bin_audit/<filename>` (or `chmod 0755 bin_audit/<filename>`), and write ONLY its filename into `workspace/devops/day-005/rogue_suid.txt`.",
       "5. Run `./grow verify 5` or `./grow test 5`."
     ],
     "setup_files": [
@@ -119,26 +121,26 @@
       "explanation": "Setting the SGID bit (`2000` / `g+s`) on a directory causes all newly created files and subdirectories inside it to inherit the directory's group (`devops`)."
     },
     {
-      "question": "Why should you ALWAYS edit `/etc/sudoers` or files in `/etc/sudoers.d/` using `visudo` instead of directly opening them with `nano` or `vim`?",
+      "question": "As explained in Chapter 9 of The Linux Command Line and today's video, why does `/usr/bin/passwd` have the SUID bit set (`-rwsr-xr-x`, owned by `root`)?",
       "options": [
-        "A) `nano` cannot open files in `/etc`",
-        "B) `visudo` locks the file against concurrent edits and validates the grammar before saving—a syntax error in `/etc/sudoers` will lock everyone out of `sudo`!",
-        "C) `visudo` automatically restarts the kernel",
-        "D) `/etc/sudoers` is a binary file"
+        "A) So `passwd` cannot be deleted by root",
+        "B) So when a normal user runs `passwd` to change their own password, the program executes with `root` privileges needed to update `/etc/shadow`",
+        "C) So `passwd` runs in the background automatically",
+        "D) So all files in `/usr/bin` inherit the `passwd` group"
       ],
       "answer": "B",
-      "explanation": "If you save a syntax error directly into `/etc/sudoers`, `sudo` immediately refuses to run for all users on the host. `visudo` parses and checks syntax before committing changes."
+      "explanation": "When SUID (`4000` / `u+s`) is set on an executable, the process runs with the effective privileges of the file's owner (`root`), allowing `passwd` to safely modify `/etc/shadow` on behalf of a standard user."
     },
     {
-      "question": "In a container image security scan, why is `allowPrivilegeEscalation: false` paired with removing SUID binaries (`chmod u-s`)?",
+      "question": "When you run `ls -l`, what does a lowercase `s` in `-rwsr-xr-x` indicate, and how do you remove that SUID bit using `chmod`?",
       "options": [
-        "A) To reduce image size by 50%",
-        "B) Because a SUID-root binary inside a container allows a compromised non-root app user to execute code as UID 0 (root)",
-        "C) SUID binaries prevent Docker from starting",
-        "D) SUID only works on Windows"
+        "A) It indicates a symbolic link; remove it with `unlink`",
+        "B) It indicates the SUID bit is set along with the owner execute (`x`) bit; remove it with `chmod u-s <file>` or `chmod 0755 <file>`",
+        "C) It indicates the Sticky Bit is set; remove it with `chmod -t <file>`",
+        "D) It indicates the file is a system socket"
       ],
       "answer": "B",
-      "explanation": "Attackers actively scan compromised containers with `find / -perm -4000` to find SUID-root binaries they can exploit to escalate from an unprivileged app user to `root`."
+      "explanation": "The `s` in the user execute slot (`rws`) means SUID (`4000`) + owner execute (`x`). Running `chmod u-s <file>` or `chmod 0755 <file>` strips the SUID bit back to `-rwxr-xr-x`."
     },
     {
       "question": "What do the octal digits `4`, `2`, and `1` represent in the 4th (leading) position of a 4-digit octal mode like `4755`, `2775`, `1777`?",
