@@ -5,10 +5,10 @@
     "devops": {
       "current_day": 3,
       "started_at": "2026-11-09",
-      "last_checkin_date": "2026-11-10",
-      "current_streak": 2,
-      "longest_streak": 2,
-      "xp": 240,
+      "last_checkin_date": "2026-11-11",
+      "current_streak": 3,
+      "longest_streak": 3,
+      "xp": 265,
       "completed_days": {
         "1": {
           "completed_at": "2026-11-09",
@@ -17,10 +17,10 @@
           "note": "I know better about how to handle the data streams linux has"
         },
         "2": {
-          "completed_at": "2026-11-10",
-          "quiz_score": 100,
+          "completed_at": "2026-11-11",
+          "quiz_score": 80,
           "lab_verified": true,
-          "note": "The FHS and the dirs that like in the root"
+          "note": "know better about the filesystem in linux and a little bit about some commands"
         }
       },
       "daily_logs": [
@@ -39,6 +39,14 @@
           "xp_earned": 120,
           "streak": 2,
           "note": "The FHS and the dirs that like in the root"
+        },
+        {
+          "date": "2026-11-11",
+          "day": 2,
+          "quiz_score": 80,
+          "xp_earned": 25,
+          "streak": 3,
+          "note": "know better about the filesystem in linux and a little bit about some commands"
         }
       ]
     }
