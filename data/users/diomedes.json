@@ -3,18 +3,24 @@
   "created_at": "2026-11-09",
   "tracks": {
     "devops": {
-      "current_day": 2,
+      "current_day": 3,
       "started_at": "2026-11-09",
-      "last_checkin_date": "2026-11-09",
-      "current_streak": 1,
-      "longest_streak": 1,
-      "xp": 120,
+      "last_checkin_date": "2026-11-10",
+      "current_streak": 2,
+      "longest_streak": 2,
+      "xp": 240,
       "completed_days": {
         "1": {
           "completed_at": "2026-11-09",
           "quiz_score": 100,
           "lab_verified": true,
           "note": "I know better about how to handle the data streams linux has"
+        },
+        "2": {
+          "completed_at": "2026-11-10",
+          "quiz_score": 100,
+          "lab_verified": true,
+          "note": "The FHS and the dirs that like in the root"
         }
       },
       "daily_logs": [
@@ -25,6 +31,14 @@
           "xp_earned": 120,
           "streak": 1,
           "note": "I know better about how to handle the data streams linux has"
+        },
+        {
+          "date": "2026-11-10",
+          "day": 2,
+          "quiz_score": 100,
+          "xp_earned": 120,
+          "streak": 2,
+          "note": "The FHS and the dirs that like in the root"
         }
       ]
     }
