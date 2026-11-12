@@ -3,12 +3,12 @@
   "created_at": "2026-11-09",
   "tracks": {
     "devops": {
-      "current_day": 3,
+      "current_day": 4,
       "started_at": "2026-11-09",
       "last_checkin_date": "2026-11-11",
       "current_streak": 3,
       "longest_streak": 3,
-      "xp": 265,
+      "xp": 365,
       "completed_days": {
         "1": {
           "completed_at": "2026-11-09",
@@ -21,6 +21,12 @@
           "quiz_score": 80,
           "lab_verified": true,
           "note": "know better about the filesystem in linux and a little bit about some commands"
+        },
+        "3": {
+          "completed_at": "2026-11-11",
+          "quiz_score": 80,
+          "lab_verified": true,
+          "note": "I didn't know a shit about hard and symlinks, now I know"
         }
       },
       "daily_logs": [
@@ -47,6 +53,14 @@
           "xp_earned": 25,
           "streak": 3,
           "note": "know better about the filesystem in linux and a little bit about some commands"
+        },
+        {
+          "date": "2026-11-11",
+          "day": 3,
+          "quiz_score": 80,
+          "xp_earned": 100,
+          "streak": 3,
+          "note": "I didn't know a shit about hard and symlinks, now I know"
         }
       ]
     }
