@@ -3,12 +3,12 @@
   "created_at": "2026-11-09",
   "tracks": {
     "devops": {
-      "current_day": 4,
+      "current_day": 5,
       "started_at": "2026-11-09",
-      "last_checkin_date": "2026-11-11",
-      "current_streak": 3,
+      "last_checkin_date": "2026-11-19",
+      "current_streak": 1,
       "longest_streak": 3,
-      "xp": 365,
+      "xp": 485,
       "completed_days": {
         "1": {
           "completed_at": "2026-11-09",
@@ -27,6 +27,12 @@
           "quiz_score": 80,
           "lab_verified": true,
           "note": "I didn't know a shit about hard and symlinks, now I know"
+        },
+        "4": {
+          "completed_at": "2026-11-19",
+          "quiz_score": 100,
+          "lab_verified": true,
+          "note": "I didnt know that much info about permissions and so on"
         }
       },
       "daily_logs": [
@@ -61,6 +67,14 @@
           "xp_earned": 100,
           "streak": 3,
           "note": "I didn't know a shit about hard and symlinks, now I know"
+        },
+        {
+          "date": "2026-11-19",
+          "day": 4,
+          "quiz_score": 100,
+          "xp_earned": 120,
+          "streak": 1,
+          "note": "I didnt know that much info about permissions and so on"
         }
       ]
     }
