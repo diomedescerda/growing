@@ -3,12 +3,12 @@
   "created_at": "2026-11-09",
   "tracks": {
     "devops": {
-      "current_day": 5,
+      "current_day": 6,
       "started_at": "2026-11-09",
-      "last_checkin_date": "2026-11-19",
-      "current_streak": 1,
+      "last_checkin_date": "2026-11-20",
+      "current_streak": 2,
       "longest_streak": 3,
-      "xp": 485,
+      "xp": 605,
       "completed_days": {
         "1": {
           "completed_at": "2026-11-09",
@@ -33,6 +33,12 @@
           "quiz_score": 100,
           "lab_verified": true,
           "note": "I didnt know that much info about permissions and so on"
+        },
+        "5": {
+          "completed_at": "2026-11-20",
+          "quiz_score": 100,
+          "lab_verified": true,
+          "note": "pretty insighful to know more about special permissions and their implications"
         }
       },
       "daily_logs": [
@@ -75,6 +81,14 @@
           "xp_earned": 120,
           "streak": 1,
           "note": "I didnt know that much info about permissions and so on"
+        },
+        {
+          "date": "2026-11-20",
+          "day": 5,
+          "quiz_score": 100,
+          "xp_earned": 120,
+          "streak": 2,
+          "note": "pretty insighful to know more about special permissions and their implications"
         }
       ]
     }
