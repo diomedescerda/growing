@@ -8,7 +8,7 @@
       "last_checkin_date": "2026-11-27",
       "current_streak": 1,
       "longest_streak": 3,
-      "xp": 830,
+      "xp": 855,
       "completed_days": {
         "1": {
           "completed_at": "2026-11-09",
@@ -48,9 +48,9 @@
         },
         "7": {
           "completed_at": "2026-11-27",
-          "quiz_score": 80,
+          "quiz_score": 100,
           "lab_verified": true,
-          "note": "pretty insighfull to know this"
+          "note": "pretty insighful to know better about tar"
         }
       },
       "daily_logs": [
@@ -125,6 +125,14 @@
           "xp_earned": 100,
           "streak": 1,
           "note": "pretty insighfull to know this"
+        },
+        {
+          "date": "2026-11-27",
+          "day": 7,
+          "quiz_score": 100,
+          "xp_earned": 25,
+          "streak": 1,
+          "note": "pretty insighful to know better about tar"
         }
       ]
     }
